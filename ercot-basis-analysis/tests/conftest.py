@@ -58,3 +58,38 @@ def synthetic_rtm_prices() -> pd.DataFrame:
 @pytest.fixture
 def zone_map() -> dict:
     return dict(ZONE_MAP)
+
+
+@pytest.fixture
+def synthetic_basis(synthetic_dam_prices, zone_map) -> pd.DataFrame:
+    """Basis table with calendar columns attached (synthetic)."""
+    from src.transform.basis import compute_basis
+    from src.transform.time_utils import add_time_parts
+
+    basis, _ = compute_basis(synthetic_dam_prices, zone_map)
+    basis["Interval Start"] = pd.to_datetime(
+        basis["interval_start_utc"]
+    ).dt.tz_convert(ERCOT_TZ)
+    return add_time_parts(basis)
+
+
+@pytest.fixture
+def synthetic_shadow_prices_dam() -> pd.DataFrame:
+    """DAM binding constraints (synthetic)."""
+    ts = pd.date_range("2025-06-11 00:00", periods=4, freq="h", tz="UTC")
+    return pd.DataFrame({
+        "Constraint Name": ["VALLEY_TIE", "VALLEY_TIE", "PANHANDLE_EXP", "NOT_BOUND"],
+        "Interval Start": ts,
+        "Shadow Price": [100.0, 50.0, 20.0, 0.0],
+    })
+
+
+@pytest.fixture
+def synthetic_shadow_prices_sced() -> pd.DataFrame:
+    """SCED binding constraints at 5-minute resolution (synthetic)."""
+    ts = pd.date_range("2025-06-11 00:00", periods=12, freq="5min", tz="UTC")
+    return pd.DataFrame({
+        "Constraint Name": ["VALLEY_TIE"] * 12,
+        "SCED Timestamp": ts,
+        "Shadow Price": [60.0] * 12,
+    })
