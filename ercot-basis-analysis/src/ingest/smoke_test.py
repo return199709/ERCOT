@@ -15,9 +15,9 @@ import os
 import sys
 from datetime import date, timedelta
 
-import gridstatus
 import pandas as pd
 from dotenv import load_dotenv
+from gridstatus.ercot_api.ercot_api import ErcotAPI
 
 SETTLEMENT_POINT = "HB_WEST"
 DEFAULT_LAG_DAYS = 3
@@ -54,7 +54,7 @@ def main() -> None:
     day = target_date()
     print(f"Pulling DAM settlement point prices for {day}...")
 
-    ercot = gridstatus.ErcotAPI()
+    ercot = ErcotAPI()
     df = ercot.get_spp_day_ahead_hourly(date=day, verbose=True)
 
     hub = df[df["Location"] == SETTLEMENT_POINT]
