@@ -21,3 +21,6 @@ package = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# src/ is not an installed package (package = false), so put the repo root
+# on sys.path for both pytest and the Makefile entry points.
+pythonpath = ["."]
