@@ -1,0 +1,23 @@
+[project]
+name = "ercot-basis-analysis"
+version = "0.1.0"
+description = "ERCOT nodal basis and congestion analysis"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "gridstatus",
+    "pandas",
+    "pyarrow",
+    "duckdb",
+    "python-dotenv",
+    "streamlit",
+    "pytest",
+]
+
+[tool.uv]
+# Scripts-and-notebooks repo, not an installable library: install the
+# dependencies but don't try to build this project itself.
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

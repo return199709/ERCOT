@@ -1,0 +1,23 @@
+# Secrets
+.env
+!.env.example
+
+# Data (keep the folder structure, never the contents)
+data/**
+!data/**/
+!data/**/.gitkeep
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local data artifacts
+*.parquet
+*.duckdb
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
