@@ -40,12 +40,19 @@ uv run python src/ingest/smoke_test.py
 ## Running it
 
 ```bash
+make doctor                  # validate credentials, connectivity and columns FIRST
 make ingest-mapping          # settlement point -> load zone (required for basis)
 make ingest MONTH=2025-06    # validate on one month before backfilling
 make analyze                 # transform, quality checks, all seven analyses
 make app                     # Streamlit dashboard
 make test                    # pytest
 ```
+
+`make doctor` pulls a single day of every dataset and checks that the column
+names this project depends on are actually present, so a feed whose schema has
+changed surfaces in minutes rather than hours into a backfill. It reports
+missing columns alongside the ones that did arrive, and never guesses a
+substitute. Exit code 0 means a backfill is safe to start.
 
 Backfill once one month looks right:
 

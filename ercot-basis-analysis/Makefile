@@ -10,13 +10,16 @@
 MONTH ?= 2025-06
 DATASETS ?= dam_spp,rtm_spp,dam_shadow_prices,sced_shadow_prices,wind_by_region,solar_by_region,system_load
 
-.PHONY: help install ingest ingest-mapping backfill analyze app test quality views clean
+.PHONY: help install doctor ingest ingest-mapping backfill analyze app test quality views clean
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 install: ## Install dependencies with uv
 	uv sync
+
+doctor: ## Validate credentials, connectivity and column assumptions (run this first)
+	uv run python -m src.ingest.preflight
 
 ingest: ## Ingest one month (make ingest MONTH=2025-06)
 	uv run python -m src.ingest.fetch --month $(MONTH) --datasets $(DATASETS)
