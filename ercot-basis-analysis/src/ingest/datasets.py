@@ -16,6 +16,7 @@ class Dataset:
     method: str        # method to call on that client
     description: str
     intervals_per_day: int | None = None  # None = irregular / event-driven
+    once: bool = False  # point-in-time reference table, not a daily series
 
 
 DATASETS: dict[str, Dataset] = {
@@ -59,6 +60,16 @@ DATASETS: dict[str, Dataset] = {
         description="Hourly solar actuals and forecast by geographic region",
         intervals_per_day=24,
     ),
+    # Point-in-time reference table, not a daily series: fetched once and
+    # reused across the whole period. Kept out of ALL_DATASETS so a monthly
+    # ingest doesn't re-download it for every day.
+    "settlement_point_mapping": Dataset(
+        name="settlement_point_mapping",
+        client="public",
+        method="get_settlement_points_electrical_bus_mapping",
+        description="Settlement point to electrical bus / load zone mapping",
+        once=True,
+    ),
     "system_load": Dataset(
         name="system_load",
         client="public",
@@ -68,18 +79,14 @@ DATASETS: dict[str, Dataset] = {
     ),
 }
 
-# Fetched once rather than per-day; used to assign nodes to load zones.
-MAPPING_DATASET = Dataset(
-    name="settlement_point_mapping",
-    client="public",
-    method="get_settlement_points_electrical_bus_mapping",
-    description="Settlement point to electrical bus mapping",
-)
-
 # The minimum set needed for the basis calculation itself.
 PRICE_DATASETS = ["dam_spp", "rtm_spp"]
 CONSTRAINT_DATASETS = ["dam_shadow_prices", "sced_shadow_prices"]
 CONTEXT_DATASETS = ["wind_by_region", "solar_by_region", "system_load"]
+MAPPING_DATASET = "settlement_point_mapping"
+
+# Daily series only. The mapping is fetched separately via `make ingest-mapping`
+# because it is a reference table with no per-day dimension.
 ALL_DATASETS = PRICE_DATASETS + CONSTRAINT_DATASETS + CONTEXT_DATASETS
 
 

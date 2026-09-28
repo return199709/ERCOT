@@ -10,7 +10,7 @@
 MONTH ?= 2025-06
 DATASETS ?= dam_spp,rtm_spp,dam_shadow_prices,sced_shadow_prices,wind_by_region,solar_by_region,system_load
 
-.PHONY: help install doctor ingest ingest-mapping backfill analyze app test quality views clean
+.PHONY: help install doctor env-check ingest ingest-mapping backfill analyze app test quality views clean
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -24,8 +24,11 @@ doctor: ## Validate credentials, connectivity and column assumptions (run this f
 ingest: ## Ingest one month (make ingest MONTH=2025-06)
 	uv run python -m src.ingest.fetch --month $(MONTH) --datasets $(DATASETS)
 
-ingest-mapping: ## Fetch the settlement point to load zone mapping (needed for basis)
+ingest-mapping: ## Fetch the settlement point -> load zone mapping (needed for basis)
 	uv run python -m src.ingest.fetch --month $(MONTH) --datasets settlement_point_mapping
+
+env-check: ## Show which credential variables are set (names only, never values)
+	@uv run python -c "from src.ingest.client import REQUIRED_VARS; from dotenv import load_dotenv, find_dotenv; import os; p=find_dotenv(); print('.env found at:', p or 'NOT FOUND'); load_dotenv(); [print(f'  {v}: ' + ('set' if os.getenv(v) else 'EMPTY or missing')) for v in REQUIRED_VARS]"
 
 backfill: ## Ingest a date range (make backfill START=2023-10-01 END=2025-09-30)
 	@test -n "$(START)" || (echo "START is required" && exit 1)

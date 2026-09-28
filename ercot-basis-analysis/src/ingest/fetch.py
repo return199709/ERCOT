@@ -62,11 +62,17 @@ def _is_permanent(exc: Exception) -> bool:
     return any(marker in text for marker in PERMANENT_ERROR_MARKERS)
 
 
-def _call_with_backoff(fn, day: date_cls, verbose: bool) -> pd.DataFrame:
-    """Call a gridstatus fetch method, retrying only transient failures."""
+def _call_with_backoff(fn, day: date_cls | None, verbose: bool) -> pd.DataFrame:
+    """Call a gridstatus fetch method, retrying only transient failures.
+
+    `day` of None omits the date argument entirely, which reference tables
+    need: they have no per-day dimension and return the current snapshot.
+    """
     last_exc: Exception | None = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
+            if day is None:
+                return fn(verbose=verbose)
             return fn(date=day.isoformat(), verbose=verbose)
         except Exception as exc:  # noqa: BLE001 - classify then re-raise
             last_exc = exc
@@ -83,6 +89,46 @@ def _call_with_backoff(fn, day: date_cls, verbose: bool) -> pd.DataFrame:
                   f"retrying in {wait:.0f}s", file=sys.stderr)
             time.sleep(wait)
     raise RuntimeError(f"Failed to fetch {day} after {MAX_ATTEMPTS} attempts: {last_exc}")
+
+
+def snapshot_path(dataset: str) -> Path:
+    """Flat path for a reference table: no year/month partitioning."""
+    return DATA_RAW / dataset / f"{dataset}.parquet"
+
+
+def fetch_once(dataset_name: str, force: bool = False,
+               verbose: bool = False) -> int:
+    """Fetch a point-in-time reference table a single time.
+
+    Reference tables such as the settlement point list have no per-day
+    dimension. Looping them over a date range would re-download the same
+    table once per day and write dozens of identical partitions.
+    """
+    spec = ds.get(dataset_name)
+    out_path = snapshot_path(dataset_name)
+
+    if not force and out_path.exists():
+        print(f"  {dataset_name}: already present, skipping "
+              f"(use --force to refresh)")
+        return 0
+
+    client = get_ercot_api() if spec.client == "api" else get_ercot()
+    df = _call_with_backoff(getattr(client, spec.method), None, verbose)
+
+    if df is None or df.empty:
+        raise RuntimeError(
+            f"{dataset_name} returned no rows. Basis cannot be computed "
+            "without it, because resource nodes could not be assigned to a "
+            "load zone. Not writing an empty table."
+        )
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(out_path, index=False)
+    manifest.record(dataset_name, "snapshot", len(df), out_path)
+    print(f"  {dataset_name}: {len(df):,} rows, {len(df.columns)} columns "
+          f"-> {out_path.relative_to(DATA_RAW.parent)}")
+    print(f"    columns: {sorted(df.columns)[:10]}")
+    return len(df)
 
 
 def fetch_day(
@@ -131,6 +177,12 @@ def fetch_range(
     verbose: bool = False,
 ) -> dict[str, int]:
     ensure_dirs()
+
+    if ds.get(dataset_name).once:
+        n = fetch_once(dataset_name, force=force, verbose=verbose)
+        return {"days_fetched": 1 if n else 0, "days_skipped": 0 if n else 1,
+                "rows": n}
+
     fetched = skipped = rows = 0
     for day in daterange(start, end):
         n = fetch_day(dataset_name, day, force=force, verbose=verbose)
