@@ -64,6 +64,15 @@ NERC_HOLIDAYS = [
 DAM_INTERVALS_PER_DAY = 24        # hourly
 RTM_INTERVALS_PER_DAY = 96        # 15-minute
 
+# --- Battery dispatch model ----------------------------------------------
+# A 100 MWh / 4-hour lithium-ion system, the shape most built in ERCOT.
+# Degradation is priced per MWh of throughput rather than capped as a cycle
+# count, because that is what actually restrains cycling economically.
+BATTERY_POWER_MW = 25.0
+BATTERY_DURATION_HOURS = 4.0
+BATTERY_ROUND_TRIP_EFFICIENCY = 0.85
+BATTERY_DEGRADATION_COST_PER_MWH = 5.0
+
 # --- Analysis parameters --------------------------------------------------
 WORST_NODES_TOP_N = 25
 TOP_CONSTRAINTS_N = 15

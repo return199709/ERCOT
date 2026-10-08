@@ -180,3 +180,58 @@ one. The mapping is fetched as a single snapshot as of the ingest start date
 and reused for the whole period. Settlement points that appear or disappear
 within the period are reported by the quality checks (§5) rather than
 reconciled against multiple snapshots.
+
+## 15. Battery dispatch is a model, not a heuristic -- and its limits
+
+`storage.py` ranks nodes by the mean of a day's four highest hours minus its
+four lowest. That is a price statistic, not a revenue: it assumes one cycle a
+day, no losses, and no wear.
+
+`dispatch.py` solves the operating problem instead, by dynamic programming
+over a discretised state of charge:
+
+| Constraint | Treatment |
+|---|---|
+| Energy capacity | `0 <= soc <= power x duration` |
+| Power rating | hourly charge/discharge capped at the rating |
+| Round-trip loss | applied on the charge side: stored = bought x efficiency |
+| Degradation | a cost per MWh of throughput, not a hard cycle cap |
+| Day boundaries | starts and ends empty, so days are independent |
+
+Defaults: 25 MW / 100 MWh (4-hour), 85% round trip, $5/MWh throughput cost.
+All four live in `src/config.py`.
+
+**The screen is not a bound in either direction**, which is why it was worth
+replacing rather than tuning. Measured on constructed days:
+
+| Day shape | Screen | Optimal, lossless | Optimal, real losses |
+|---|---|---|---|
+| One trough, one peak | $9,000 | $9,000 (1.0 cycle) | $7,824 (1.0 cycle) |
+| Volatile | $10,416 | $14,240 (3.0 cycles) | $11,647 (2.2 cycles) |
+| Spiky | $6,875 | $6,875 (0.2 cycles) | $6,515 (0.2 cycles) |
+
+It overstates when efficiency and wear bite, and understates when prices
+swing more than once in a day.
+
+**Perfect foresight is deliberate and must be read as such.** The model knows
+the whole day's prices in advance, so its output is the *maximum extractable*
+value -- an upper bound on what an operator bidding against forecasts could
+capture. It sizes the prize; it is not a trading backtest, and the figures
+should never be quoted as achievable revenue.
+
+**Other limits.** The battery is a price taker: it never moves the price it
+trades against, which is reasonable for one 100 MWh asset among ERCOT's
+thousands of MW of storage and would not be for a fleet. No ancillary service
+revenue, which in ERCOT is a large share of real storage income, so the
+figures understate total value while overstating the arbitrage component. A
+day with missing hours or a null price is skipped rather than optimised
+against gaps.
+
+## 16. Revenue decomposition against the hub
+
+Dispatch revenue is split into what a battery at the trading hubs would have
+earned from ERCOT's system-wide daily price shape, and the remainder
+attributable to the node's own basis. The hub benchmark is the mean across
+the four trading hubs, not each node's assigned hub, so the split measures
+"volatile market" against "well-placed site" rather than re-importing the hub
+assignment assumption from section 1.

@@ -132,6 +132,26 @@ def main() -> int:
     show(_load("storage_spread"), "storage_spread",
          ["Location", "days", "mean_spread", "median_spread", "p95_spread"], 12)
 
+    section("7b. OPTIMAL BATTERY DISPATCH ($/kW-year, 100 MWh / 4h)")
+    print("  Solved subject to round-trip efficiency, power rating, state of")
+    print("  charge and degradation, with perfect foresight. Perfect foresight")
+    print("  makes this the MAXIMUM EXTRACTABLE value, not a trading backtest.\n")
+    show(_load("dispatch_by_node"), "dispatch_by_node",
+         ["Location", "days", "revenue_per_day", "annual_per_kw", "mean_cycles"], 12)
+
+    section("7c. WHERE THAT REVENUE COMES FROM")
+    split = _load("dispatch_decomposition")
+    if split is not None and not split.empty:
+        print("  hub_revenue is what a battery at the trading hubs would have")
+        print("  earned from the system-wide price shape. basis_revenue is the")
+        print("  part attributable to this node's own congestion.\n")
+        show(split, "dispatch_decomposition",
+             ["Location", "node_revenue", "hub_revenue", "basis_revenue",
+              "basis_share"], 12)
+        print(f"\n  median basis share: {split['basis_share'].median():.1%}")
+        print(f"  nodes where basis ADDS value: "
+              f"{int((split['basis_revenue'] > 0).sum()):,} of {len(split):,}")
+
     section("DATA QUALITY")
     from src.config import QUALITY_REPORTS
     for path in sorted(QUALITY_REPORTS.glob("*.md")):

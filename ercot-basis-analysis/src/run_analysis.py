@@ -17,9 +17,14 @@ import pandas as pd
 
 from src import db
 from src.analysis import (
-    basis_stats, constraints, da_rt, negative_prices, renewables, storage, trend,
+    basis_stats, constraints, da_rt, dispatch, negative_prices, renewables,
+    storage, trend,
 )
-from src.config import SOLAR_FOCUS_REGIONS, WIND_FOCUS_REGIONS, ensure_dirs
+from src.config import (
+    BATTERY_DEGRADATION_COST_PER_MWH, BATTERY_DURATION_HOURS,
+    BATTERY_POWER_MW, BATTERY_ROUND_TRIP_EFFICIENCY, SOLAR_FOCUS_REGIONS,
+    TRADING_HUBS, WIND_FOCUS_REGIONS, ensure_dirs,
+)
 from src.transform import quality
 from src.transform.basis import compute_basis, da_rt_spread
 from src.transform.mapping import build_zone_map
@@ -117,6 +122,40 @@ def run(verbose: bool = False) -> int:
     written.append(str(db.write_processed(negative_prices.by_node_month(dam),
                                           "negative_prices_by_month")))
     written.append(str(db.write_processed(storage.by_node(dam), "storage_spread")))
+
+    # --- analysis 7b: optimal battery dispatch (energy model) ------------
+    # The screen above is a price heuristic. This solves the operating
+    # problem subject to efficiency, power, state of charge and degradation.
+    spec = dispatch.BatterySpec(
+        power_mw=BATTERY_POWER_MW,
+        duration_hours=BATTERY_DURATION_HOURS,
+        round_trip_efficiency=BATTERY_ROUND_TRIP_EFFICIENCY,
+        degradation_cost_per_mwh=BATTERY_DEGRADATION_COST_PER_MWH,
+    )
+    print(f"  dispatching a {spec.energy_mwh:.0f} MWh / "
+          f"{spec.duration_hours:.0f}h battery at every node "
+          f"(this is the slow step)...")
+    node_daily = dispatch.dispatch_series(
+        dam[dam["Location"].isin(usable["Location"].unique())], spec
+    )
+    if not node_daily.empty:
+        written.append(str(db.write_processed(node_daily, "dispatch_daily")))
+        ranked = dispatch.annualise(node_daily, spec)
+        written.append(str(db.write_processed(ranked, "dispatch_by_node")))
+        print(f"  dispatch: {len(node_daily):,} node-days, "
+              f"best ${ranked['annual_per_kw'].iloc[0]:,.0f}/kW-yr, "
+              f"median ${ranked['annual_per_kw'].median():,.0f}/kW-yr")
+
+        # A battery at the hub earns from the system-wide price shape;
+        # anything beyond that is this node's basis.
+        hub_daily = dispatch.dispatch_series(
+            dam[dam["Location"].isin(TRADING_HUBS)], spec
+        )
+        if not hub_daily.empty:
+            split = dispatch.decompose(node_daily, hub_daily)
+            written.append(str(db.write_processed(split, "dispatch_decomposition")))
+            print(f"  decomposition: median basis share of dispatch revenue "
+                  f"{split['basis_share'].median():.1%}")
 
     # --- analysis 6 (needs RTM) ------------------------------------------
     rtm = _load("rtm_spp")
