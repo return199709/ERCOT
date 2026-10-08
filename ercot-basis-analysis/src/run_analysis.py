@@ -73,9 +73,15 @@ def run(verbose: bool = False) -> int:
     # --- quality ---------------------------------------------------------
     dam_report = quality.check(dam, "dam_spp", 24)
     quality.write_report(dam_report)
-    print(f"  quality: {len(dam_report.gaps)} gap rows, "
-          f"{len(dam_report.duplicates)} duplicate keys, "
+    print(f"  quality: {len(dam_report.gaps)} gap location-days "
+          f"({dam_report.absent_location_days} wholly absent), "
+          f"{len(dam_report.partial_coverage)} locations not spanning the "
+          f"period, {len(dam_report.duplicates)} duplicate keys, "
           f"{dam_report.null_prices} null prices")
+    if not dam_report.gaps.empty:
+        print(f"  -> reported in reports/quality/dam_spp.md; gaps are never "
+              f"filled. Statistics carry an `n` column so a thin node is "
+              f"visible rather than silently equal-weighted.")
 
     # --- basis -----------------------------------------------------------
     zone_map = _zone_map()

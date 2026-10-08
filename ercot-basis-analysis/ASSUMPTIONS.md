@@ -69,8 +69,30 @@ Some desks use 7×16. Change `PEAK_WEEKDAYS` in `src/config.py` to switch.
 
 Gaps, duplicates and settlement-point membership changes are detected and
 written to `reports/quality/`. They are **never** interpolated, forward-filled
-or zero-filled. Analyses exclude affected location-days. A silently patched
-price series produces basis numbers that look authoritative and are wrong.
+or zero-filled. A silently patched price series produces basis numbers that
+look authoritative and are wrong.
+
+**What detection covers.** The full location x day grid, not only the
+location-days that returned rows. Grouping by (location, day) and comparing
+the count to the expected interval total finds a *short* day but never a
+*missing* one, because an absent location-day forms no group. Real June 2025
+data carried 29 wholly absent location-days that an earlier version of this
+check reported as zero gaps. Absences and partial days are now reported
+separately under `kind`.
+
+**Lifecycle is not loss.** Each location is only held to account between its
+own first and last observed date, so a settlement point commissioned or
+retired mid-period is not reported as gapped. Those appear instead in a
+coverage table, because their statistics rest on fewer days than the rest and
+rankings across them are not like-for-like.
+
+**What happens to a flagged location-day.** It is *not* dropped wholesale.
+Excluding a day that is missing one hour would discard twenty-three good
+observations. Per-interval statistics use what exists and report `n` beside
+every figure, so thin data is visible rather than silently equal-weighted
+against complete data. Day-level analyses that a short day would distort
+guard themselves: the storage screen returns NaN when a day cannot supply two
+disjoint 4-hour windows.
 
 ## 6. Congestion cost units
 

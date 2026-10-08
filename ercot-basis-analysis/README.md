@@ -98,8 +98,17 @@ prices across all settlement points.
 
 These are enforced in code, not just documented:
 
-- **Gaps are reported, never filled.** No interpolation, no forward-fill.
-  Affected location-days are excluded from analyses.
+- **Gaps are reported, never filled.** No interpolation, no forward-fill, no
+  zero-fill. Detection covers the full location x day grid, so a settlement
+  point missing from a day *entirely* is caught, not just a short day --
+  grouping alone misses the former. Whole absences and partial days are
+  reported separately, as are locations that do not span the period because
+  they were commissioned or retired mid-way.
+- **Short days are not silently dropped either.** Per-interval statistics use
+  the observations that exist and report `n` alongside every figure, so a
+  node resting on thin data is visible. Day-level analyses that would be
+  distorted by a short day guard explicitly: the storage screen returns NaN
+  rather than a spread built from fewer than two disjoint windows.
 - **Hub assignment is never guessed.** A node whose load zone is unknown is
   reported as unmapped and excluded, rather than attributed to a plausible hub.
 - **DST is handled explicitly.** Expected interval counts are 23/92 on

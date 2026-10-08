@@ -84,3 +84,81 @@ class TestCheckReport:
         report = check(dirty, "synthetic_dam", 24)
         assert report.null_prices == 1
         assert not report.clean
+
+
+class TestWhollyAbsentLocationDays:
+    """Regression: real June data had 29 absent location-days reported as 0.
+
+    Grouping by (location, day) only ever finds a partial day. A location
+    missing from a day entirely produces no group, so it went unseen.
+    """
+
+    def _frame(self, spec: dict) -> pd.DataFrame:
+        """spec maps day offset -> locations present, 24 hourly rows each."""
+        rows = []
+        for offset, locations in spec.items():
+            base = pd.Timestamp("2025-06-01", tz=ERCOT_TZ) + pd.Timedelta(days=offset)
+            for location in locations:
+                for hour in range(24):
+                    rows.append({
+                        "Location": location,
+                        "interval_start_utc": (base + pd.Timedelta(hours=hour))
+                            .tz_convert("UTC"),
+                        "SPP": 30.0,
+                    })
+        return pd.DataFrame(rows)
+
+    def test_absent_day_inside_the_window_is_reported(self):
+        df = self._frame({0: ["A", "B"], 1: ["A"], 2: ["A", "B"]})
+        gaps = find_gaps(df, 24)
+        absent = gaps[gaps["kind"] == "absent"]
+        assert len(absent) == 1
+        assert absent["Location"].iloc[0] == "B"
+        assert absent["missing"].iloc[0] == 24
+        assert absent["observed"].iloc[0] == 0
+
+    def test_partial_and_absent_are_distinguished(self):
+        df = self._frame({0: ["A", "B"], 1: ["A"], 2: ["A", "B"]})
+        df = df[~((df["Location"] == "A")
+                  & (df["interval_start_utc"] == df["interval_start_utc"].min()))]
+        gaps = find_gaps(df, 24)
+        assert set(gaps["kind"]) == {"absent", "partial"}
+
+    def test_retired_location_is_not_a_gap(self):
+        """Present days 0-1 then gone: lifecycle, not loss."""
+        df = self._frame({0: ["A", "B"], 1: ["A", "B"], 2: ["A"]})
+        gaps = find_gaps(df, 24)
+        assert gaps.empty
+
+    def test_commissioned_location_is_not_a_gap(self):
+        df = self._frame({0: ["A"], 1: ["A", "B"], 2: ["A", "B"]})
+        assert find_gaps(df, 24).empty
+
+    def test_row_arithmetic_matches_the_observed_shortfall(self):
+        """The June signature: rows short == absent location-days x 24."""
+        df = self._frame({0: ["A", "B"], 1: ["A"], 2: ["A", "B"]})
+        locations, days = df["Location"].nunique(), 3
+        shortfall = locations * days * 24 - len(df)
+        gaps = find_gaps(df, 24)
+        assert shortfall == 24
+        assert int(gaps["missing"].sum()) == shortfall
+
+    def test_clean_data_still_reports_nothing(self):
+        df = self._frame({0: ["A", "B"], 1: ["A", "B"]})
+        assert find_gaps(df, 24).empty
+
+
+class TestCoverage:
+    def _frame(self, spec):
+        return TestWhollyAbsentLocationDays()._frame(spec)
+
+    def test_reports_locations_missing_days(self):
+        from src.transform.quality import find_coverage
+        cov = find_coverage(self._frame({0: ["A", "B"], 1: ["A"], 2: ["A"]}))
+        assert cov["Location"].tolist() == ["B"]
+        assert cov["days_present"].iloc[0] == 1
+        assert cov["days_in_period"].iloc[0] == 3
+
+    def test_full_coverage_reports_nothing(self):
+        from src.transform.quality import find_coverage
+        assert find_coverage(self._frame({0: ["A"], 1: ["A"]})).empty

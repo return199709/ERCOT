@@ -23,6 +23,7 @@ class QualityReport:
     duplicates: pd.DataFrame = field(default_factory=pd.DataFrame)
     gaps: pd.DataFrame = field(default_factory=pd.DataFrame)
     name_changes: dict[str, list[str]] = field(default_factory=dict)
+    partial_coverage: pd.DataFrame = field(default_factory=pd.DataFrame)
     null_prices: int = 0
 
     @property
@@ -33,6 +34,12 @@ class QualityReport:
             and not any(self.name_changes.values())
             and self.null_prices == 0
         )
+
+    @property
+    def absent_location_days(self) -> int:
+        if self.gaps.empty:
+            return 0
+        return int((self.gaps["kind"] == "absent").sum())
 
 
 def find_duplicates(df: pd.DataFrame,
@@ -53,10 +60,26 @@ def find_duplicates(df: pd.DataFrame,
 
 def find_gaps(df: pd.DataFrame, intervals_per_day: int,
               value_col: str = "SPP") -> pd.DataFrame:
-    """Per location-day, compare observed interval count to the DST-aware expectation."""
+    """Per location-day, compare observed intervals to the DST-aware expectation.
+
+    Checks the full location x day grid, not just the groups that exist.
+    Grouping alone only ever finds a *partial* day: a location missing from a
+    day entirely produces no group, so it was previously invisible. Real data
+    showed 29 wholly absent location-days reported as zero gaps.
+
+    Each location is only held to account between its own first and last
+    observed date. A resource commissioned or retired mid-period is a
+    membership change, not a gap, and is reported by find_coverage instead --
+    conflating the two would bury real gaps in lifecycle noise.
+
+    The `kind` column distinguishes:
+      absent   -- no rows at all for that location-day
+      partial  -- present, but fewer intervals than expected
+    """
+    columns = ["Location", "local_date", "observed", "expected", "missing", "kind"]
     if df.empty:
-        return pd.DataFrame(columns=["Location", "local_date", "observed",
-                                     "expected", "missing"])
+        return pd.DataFrame(columns=columns)
+
     work = df.copy()
     local = pd.to_datetime(work["interval_start_utc"]).dt.tz_convert(ERCOT_TZ)
     work["local_date"] = local.dt.date
@@ -65,11 +88,63 @@ def find_gaps(df: pd.DataFrame, intervals_per_day: int,
         work.groupby(["Location", "local_date"], as_index=False)
         .agg(observed=(value_col, "size"))
     )
-    observed["expected"] = observed["local_date"].map(
-        lambda d: expected_intervals(pd.Timestamp(d), intervals_per_day)
+
+    dates = sorted(work["local_date"].unique())
+    expected_by_date = {
+        d: expected_intervals(pd.Timestamp(d), intervals_per_day) for d in dates
+    }
+
+    # Each location's own active window.
+    window = observed.groupby("Location")["local_date"].agg(["min", "max"])
+
+    rows = []
+    counts = {(r.Location, r.local_date): r.observed
+              for r in observed.itertuples()}
+    for location, (first, last) in window.iterrows():
+        for day in dates:
+            if day < first or day > last:
+                continue  # outside this location's lifetime
+            seen = counts.get((location, day), 0)
+            due = expected_by_date[day]
+            if seen != due:
+                rows.append({
+                    "Location": location,
+                    "local_date": day,
+                    "observed": seen,
+                    "expected": due,
+                    "missing": due - seen,
+                    "kind": "absent" if seen == 0 else "partial",
+                })
+
+    return pd.DataFrame(rows, columns=columns)
+
+
+def find_coverage(df: pd.DataFrame) -> pd.DataFrame:
+    """Locations whose data does not span the whole period.
+
+    Distinguishes lifecycle from loss: a settlement point commissioned or
+    retired mid-period legitimately has no data outside its window, and
+    should not be reported as a gap, but a reader needs to know its
+    statistics cover fewer days than everyone else's.
+    """
+    if df.empty:
+        return pd.DataFrame(columns=["Location", "first_date", "last_date",
+                                     "days_present", "days_in_period"])
+
+    work = df.copy()
+    local = pd.to_datetime(work["interval_start_utc"]).dt.tz_convert(ERCOT_TZ)
+    work["local_date"] = local.dt.date
+    total_days = work["local_date"].nunique()
+
+    per_location = work.groupby("Location")["local_date"].agg(
+        first_date="min", last_date="max", days_present="nunique"
+    ).reset_index()
+    per_location["days_in_period"] = total_days
+    return (
+        per_location[per_location["days_present"] < total_days]
+        .sort_values("days_present")
+        .reset_index(drop=True)
     )
-    observed["missing"] = observed["expected"] - observed["observed"]
-    return observed[observed["missing"] != 0].reset_index(drop=True)
 
 
 def find_name_changes(df: pd.DataFrame, month_col: str = "month",
@@ -100,6 +175,7 @@ def check(df: pd.DataFrame, dataset: str, intervals_per_day: int,
         return report
     report.duplicates = find_duplicates(df)
     report.gaps = find_gaps(df, intervals_per_day, value_col)
+    report.partial_coverage = find_coverage(df)
     report.name_changes = find_name_changes(df)
     if value_col in df.columns:
         report.null_prices = int(df[value_col].isna().sum())
@@ -152,7 +228,12 @@ def write_report(report: QualityReport, path=None) -> str:
         "",
         f"- Rows examined: **{report.rows:,}**",
         f"- Duplicate (location, interval) keys: **{len(report.duplicates):,}**",
-        f"- Location-days with missing or extra intervals: **{len(report.gaps):,}**",
+        f"- Location-days with missing or extra intervals: **{len(report.gaps):,}**"
+        + (f" ({int((report.gaps['kind'] == 'absent').sum()):,} wholly absent, "
+           f"{int((report.gaps['kind'] == 'partial').sum()):,} partial)"
+           if not report.gaps.empty else ""),
+        f"- Locations not covering the whole period: "
+        f"**{len(report.partial_coverage):,}**",
         f"- Null prices: **{report.null_prices:,}**",
         f"- Settlement points appearing mid-period: "
         f"**{len(report.name_changes.get('appeared', []))}**",
@@ -164,8 +245,21 @@ def write_report(report: QualityReport, path=None) -> str:
         "",
     ]
     if not report.gaps.empty:
-        lines += ["## Worst gaps", "",
-                  report.gaps.nlargest(20, "missing").to_markdown(index=False), ""]
+        lines += [
+            "## Worst gaps", "",
+            "`absent` means no rows at all for that location-day; `partial` "
+            "means present but short. Affected location-days are excluded "
+            "from the analyses, never interpolated.", "",
+            report.gaps.nlargest(20, "missing").to_markdown(index=False), "",
+        ]
+    if not report.partial_coverage.empty:
+        lines += [
+            "## Locations not spanning the whole period", "",
+            "Commissioned or retired mid-period. Their statistics rest on "
+            "fewer days than the rest, so rankings across them are not "
+            "like-for-like.", "",
+            report.partial_coverage.head(20).to_markdown(index=False), "",
+        ]
     if report.name_changes.get("appeared") or report.name_changes.get("disappeared"):
         lines += ["## Settlement point membership changes", ""]
         for key in ("appeared", "disappeared"):
