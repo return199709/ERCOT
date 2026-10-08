@@ -162,3 +162,52 @@ class TestCoverage:
     def test_full_coverage_reports_nothing(self):
         from src.transform.quality import find_coverage
         assert find_coverage(self._frame({0: ["A"], 1: ["A"]})).empty
+
+
+class TestIdenticalSeries:
+    """Real June data showed two nodes with byte-identical basis statistics.
+
+    In ERCOT, settlement points resolving to the same electrical bus settle
+    at the same LMP. That is market behaviour, not an error, but it means a
+    per-node ranking is not a ranking of independent observations.
+    """
+
+    def _frame(self, series: dict[str, list[float]]) -> pd.DataFrame:
+        rows = []
+        for location, values in series.items():
+            for hour, value in enumerate(values):
+                rows.append({
+                    "Location": location,
+                    "interval_start_utc": pd.Timestamp("2025-06-01", tz="UTC")
+                        + pd.Timedelta(hours=hour),
+                    "SPP": value,
+                })
+        return pd.DataFrame(rows)
+
+    def test_identical_pair_is_grouped(self):
+        from src.transform.quality import find_identical_series
+        values = [float(v) for v in range(30)]
+        out = find_identical_series(self._frame({"A": values, "B": values}),
+                                    min_overlap=24)
+        assert len(out) == 1
+        assert out["n_locations"].iloc[0] == 2
+        assert out["locations"].iloc[0] == "A, B"
+
+    def test_distinct_series_not_grouped(self):
+        from src.transform.quality import find_identical_series
+        a = [float(v) for v in range(30)]
+        b = [float(v) + 0.01 for v in range(30)]
+        assert find_identical_series(self._frame({"A": a, "B": b}),
+                                     min_overlap=24).empty
+
+    def test_three_way_group(self):
+        from src.transform.quality import find_identical_series
+        values = [float(v) for v in range(30)]
+        out = find_identical_series(
+            self._frame({"A": values, "B": values, "C": values}), min_overlap=24
+        )
+        assert out["n_locations"].iloc[0] == 3
+
+    def test_empty_input_is_safe(self):
+        from src.transform.quality import find_identical_series
+        assert find_identical_series(pd.DataFrame()).empty

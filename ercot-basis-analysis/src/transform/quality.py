@@ -24,6 +24,7 @@ class QualityReport:
     gaps: pd.DataFrame = field(default_factory=pd.DataFrame)
     name_changes: dict[str, list[str]] = field(default_factory=dict)
     partial_coverage: pd.DataFrame = field(default_factory=pd.DataFrame)
+    identical_series: pd.DataFrame = field(default_factory=pd.DataFrame)
     null_prices: int = 0
 
     @property
@@ -147,6 +148,49 @@ def find_coverage(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def find_identical_series(df: pd.DataFrame, value_col: str = "SPP",
+                         min_overlap: int = 24) -> pd.DataFrame:
+    """Group settlement points whose price series are byte-identical.
+
+    In ERCOT many settlement points resolve to the same electrical bus and
+    therefore settle at the same LMP. That is a real property of the market,
+    not an error -- but it means those points are NOT independent
+    observations. A "worst 25 nodes" ranking built without knowing this can
+    be 25 names covering far fewer distinct price series, which silently
+    overstates how widespread a congestion pattern is.
+
+    Returns one row per group of two or more locations sharing a series.
+    """
+    columns = ["group", "n_locations", "locations", "intervals"]
+    if df.empty or value_col not in df.columns:
+        return pd.DataFrame(columns=columns)
+
+    wide = df.pivot_table(index="interval_start_utc", columns="Location",
+                          values=value_col, aggfunc="first")
+    wide = wide.dropna(axis=1, thresh=min_overlap)
+    if wide.empty:
+        return pd.DataFrame(columns=columns)
+
+    # Hash each column's values; identical series share a digest.
+    digests: dict[str, list[str]] = {}
+    for location in wide.columns:
+        series = wide[location]
+        key = pd.util.hash_pandas_object(series.fillna(float("-inf")),
+                                         index=False).sum()
+        digests.setdefault(f"{key}:{int(series.notna().sum())}", []).append(location)
+
+    rows = []
+    for index, (_, locations) in enumerate(
+            sorted((k, v) for k, v in digests.items() if len(v) > 1)):
+        rows.append({
+            "group": index + 1,
+            "n_locations": len(locations),
+            "locations": ", ".join(sorted(locations)),
+            "intervals": int(wide[locations[0]].notna().sum()),
+        })
+    return pd.DataFrame(rows, columns=columns)
+
+
 def find_name_changes(df: pd.DataFrame, month_col: str = "month",
                       location_col: str = "Location") -> dict[str, list[str]]:
     """Settlement points that appear or disappear between consecutive months."""
@@ -176,6 +220,7 @@ def check(df: pd.DataFrame, dataset: str, intervals_per_day: int,
     report.duplicates = find_duplicates(df)
     report.gaps = find_gaps(df, intervals_per_day, value_col)
     report.partial_coverage = find_coverage(df)
+    report.identical_series = find_identical_series(df, value_col)
     report.name_changes = find_name_changes(df)
     if value_col in df.columns:
         report.null_prices = int(df[value_col].isna().sum())
@@ -234,6 +279,10 @@ def write_report(report: QualityReport, path=None) -> str:
            if not report.gaps.empty else ""),
         f"- Locations not covering the whole period: "
         f"**{len(report.partial_coverage):,}**",
+        f"- Groups of settlement points sharing an identical price series: "
+        f"**{len(report.identical_series):,}**"
+        + (f" covering {int(report.identical_series['n_locations'].sum()):,} "
+           "locations" if not report.identical_series.empty else ""),
         f"- Null prices: **{report.null_prices:,}**",
         f"- Settlement points appearing mid-period: "
         f"**{len(report.name_changes.get('appeared', []))}**",
@@ -251,6 +300,15 @@ def write_report(report: QualityReport, path=None) -> str:
             "means present but short. Affected location-days are excluded "
             "from the analyses, never interpolated.", "",
             report.gaps.nlargest(20, "missing").to_markdown(index=False), "",
+        ]
+    if not report.identical_series.empty:
+        lines += [
+            "## Settlement points sharing a price series", "",
+            "These resolve to the same electrical bus and settle at the same "
+            "LMP. Real market behaviour, not an error -- but they are not "
+            "independent observations, so a per-node ranking covers fewer "
+            "distinct price series than it has rows.", "",
+            report.identical_series.head(25).to_markdown(index=False), "",
         ]
     if not report.partial_coverage.empty:
         lines += [

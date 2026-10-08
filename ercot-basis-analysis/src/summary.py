@@ -50,6 +50,27 @@ def main() -> int:
         print(f"  nodes with basis  {basis['basis'].notna().groupby(basis['Location']).any().sum():,}")
         print(f"  hubs referenced   {sorted(basis['assigned_hub'].dropna().unique())}")
 
+    section("SHARED PRICE SERIES (read before any ranking)")
+    raw = None
+    try:
+        raw = db.read_raw("dam_spp")
+    except FileNotFoundError:
+        pass
+    if raw is not None and not raw.empty:
+        from src.transform.quality import find_identical_series
+        from src.transform.time_utils import ensure_utc
+        shared = find_identical_series(ensure_utc(raw, "Interval Start"))
+        if shared.empty:
+            print("  Every settlement point has a distinct price series.")
+        else:
+            covered = int(shared["n_locations"].sum())
+            print(f"  {len(shared):,} groups of settlement points share an "
+                  f"identical price series, covering {covered:,} locations.")
+            print("  They resolve to the same electrical bus. Real market "
+                  "behaviour, but they are NOT independent observations:")
+            print("  a top-25 list may cover far fewer distinct series.\n")
+            print(shared.head(12).to_string(index=False))
+
     section(f"1. WORST {WORST_NODES_TOP_N} NODES BY MEAN BASIS ($/MWh)")
     show(_load("worst_nodes"), "worst_nodes",
          ["Location", "n", "mean", "p5", "p95", "std"], WORST_NODES_TOP_N)
