@@ -49,9 +49,13 @@ def build_zone_map(mapping_df: pd.DataFrame) -> dict[str, str]:
     candidates are probed and a clear error is raised if none match -- better
     than silently producing an empty map.
     """
-    sp_candidates = ["SETTLEMENT_POINT", "Settlement Point", "SettlementPoint",
-                     "RESOURCE_NODE", "Settlement Point Name"]
-    zone_candidates = ["SETTLEMENT_LOAD_ZONE", "Settlement Load Zone",
+    # "Resource Node" is the live column name, confirmed against the real
+    # settlement point list. The earlier uppercase guesses are kept for
+    # older report revisions.
+    sp_candidates = ["Resource Node", "SETTLEMENT_POINT", "Settlement Point",
+                     "SettlementPoint", "RESOURCE_NODE",
+                     "Settlement Point Name", "Node Name"]
+    zone_candidates = ["Settlement Load Zone", "SETTLEMENT_LOAD_ZONE",
                        "LOAD_ZONE", "Load Zone", "Zone"]
 
     sp_col = next((c for c in sp_candidates if c in mapping_df.columns), None)

@@ -72,9 +72,10 @@ COLUMN_CONTRACTS: list[tuple[str, str, list[str], bool]] = [
 
 # Settlement point -> load zone, the mapping basis depends on entirely.
 MAPPING_CONTRACTS = [
-    ("settlement point", ["SETTLEMENT_POINT", "Settlement Point", "SettlementPoint",
-                          "RESOURCE_NODE", "Settlement Point Name"]),
-    ("load zone", ["SETTLEMENT_LOAD_ZONE", "Settlement Load Zone", "LOAD_ZONE",
+    ("settlement point", ["Resource Node", "SETTLEMENT_POINT", "Settlement Point",
+                          "SettlementPoint", "RESOURCE_NODE",
+                          "Settlement Point Name", "Node Name"]),
+    ("load zone", ["Settlement Load Zone", "SETTLEMENT_LOAD_ZONE", "LOAD_ZONE",
                    "Load Zone", "Zone"]),
 ]
 

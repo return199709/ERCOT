@@ -73,9 +73,13 @@ DATASETS: dict[str, Dataset] = {
     "system_load": Dataset(
         name="system_load",
         client="public",
-        method="get_system_wide_actual_load",
-        description="15-minute system-wide actual load",
-        intervals_per_day=96,
+        method="get_hourly_load_post_settlements",
+        # get_system_wide_actual_load reads the MIS document listing, which
+        # rolls off after LOAD_HISTORICAL_MAX_DAYS (14), so it returns nothing
+        # for a historical backfill. This method reads ERCOT's load_hist
+        # archive instead and covers the full period.
+        description="Hourly settlement-quality load by weather zone",
+        intervals_per_day=24,
     ),
 }
 

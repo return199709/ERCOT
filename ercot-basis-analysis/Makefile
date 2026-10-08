@@ -10,7 +10,7 @@
 MONTH ?= 2025-06
 DATASETS ?= dam_spp,rtm_spp,dam_shadow_prices,sced_shadow_prices,wind_by_region,solar_by_region,system_load
 
-.PHONY: help install doctor env-check ingest ingest-mapping backfill analyze app test quality views clean
+.PHONY: help install doctor env-check inspect-mapping ingest ingest-mapping backfill analyze app test quality views clean
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -26,6 +26,9 @@ ingest: ## Ingest one month (make ingest MONTH=2025-06)
 
 ingest-mapping: ## Fetch the settlement point -> load zone mapping (needed for basis)
 	uv run python -m src.ingest.fetch --month $(MONTH) --datasets settlement_point_mapping
+
+inspect-mapping: ## Measure which mapping column is the settlement point, and whether ERCOT publishes a node->hub relationship
+	uv run python -m src.ingest.inspect_mapping
 
 env-check: ## Show which credential variables are set (names only, never values)
 	@uv run python -c "from src.ingest.client import REQUIRED_VARS; from dotenv import load_dotenv, find_dotenv; import os; p=find_dotenv(); print('.env found at:', p or 'NOT FOUND'); load_dotenv(); [print(f'  {v}: ' + ('set' if os.getenv(v) else 'EMPTY or missing')) for v in REQUIRED_VARS]"
