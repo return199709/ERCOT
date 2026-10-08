@@ -61,8 +61,22 @@ class TestValidateColumns:
 
     def test_optional_column_warns_rather_than_fails(self):
         df = pd.DataFrame(columns=["Nothing", "Useful"])
-        results = validate_columns("wind_by_region", df)
+        results = validate_columns("system_load", df)
         assert [s for s, _, _ in results] == [WARN]
+
+    def test_renewable_feeds_are_checked_structurally_not_by_name(self):
+        """Wide feeds can't be expressed as a flat candidate list."""
+        from src.ingest.preflight import RENEWABLE_REGIONS, validate_renewable
+        assert set(RENEWABLE_REGIONS) == {"wind_by_region", "solar_by_region"}
+        df = pd.DataFrame(columns=["GEN WEST", "GEN PANHANDLE", "COP HSL WEST"])
+        results = validate_renewable("wind_by_region", df)
+        assert all(s == PASS for s, _, _ in results)
+
+    def test_renewable_missing_focus_region_fails(self):
+        from src.ingest.preflight import validate_renewable
+        df = pd.DataFrame(columns=["GEN NORTH"])
+        results = validate_renewable("wind_by_region", df)
+        assert FAIL in [s for s, _, _ in results]
 
     def test_alternate_spelling_accepted(self):
         df = pd.DataFrame(columns=["ConstraintName", "ShadowPrice", "Timestamp"])

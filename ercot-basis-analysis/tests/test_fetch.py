@@ -1,7 +1,11 @@
 """Tests for ingest orchestration (stubbed clients; no network)."""
 
+from datetime import date
+
 import pandas as pd
 import pytest
+
+PROBE_DAY = date(2025, 6, 1)
 
 from src.ingest import datasets as ds
 from src.ingest import fetch
@@ -59,15 +63,19 @@ class TestFetchOnce:
         fetch.fetch_range("settlement_point_mapping", start, end)
         assert len(client.calls) == 1
 
-    def test_omits_the_date_argument(self, stub_mapping):
-        """A reference table has no per-day dimension."""
+    def test_passes_the_required_date(self, stub_mapping):
+        """gridstatus raises "Must supply either 'date' or 'start'" without it.
+
+        The signature defaults date to None, but @support_date_range enforces
+        it anyway -- a real run failed here before this was fixed.
+        """
         client, _ = stub_mapping
-        fetch.fetch_once("settlement_point_mapping")
-        assert "date" not in client.calls[0]
+        fetch.fetch_once("settlement_point_mapping", PROBE_DAY)
+        assert client.calls[0]["date"] == "2025-06-01"
 
     def test_writes_a_flat_unpartitioned_file(self, stub_mapping):
         _, root = stub_mapping
-        fetch.fetch_once("settlement_point_mapping")
+        fetch.fetch_once("settlement_point_mapping", PROBE_DAY)
         written = list(root.rglob("*.parquet"))
         assert len(written) == 1
         assert written[0].name == "settlement_point_mapping.parquet"
@@ -75,14 +83,14 @@ class TestFetchOnce:
 
     def test_second_run_is_idempotent(self, stub_mapping):
         client, _ = stub_mapping
-        fetch.fetch_once("settlement_point_mapping")
-        fetch.fetch_once("settlement_point_mapping")
+        fetch.fetch_once("settlement_point_mapping", PROBE_DAY)
+        fetch.fetch_once("settlement_point_mapping", PROBE_DAY)
         assert len(client.calls) == 1  # second run skipped
 
     def test_force_refetches(self, stub_mapping):
         client, _ = stub_mapping
-        fetch.fetch_once("settlement_point_mapping")
-        fetch.fetch_once("settlement_point_mapping", force=True)
+        fetch.fetch_once("settlement_point_mapping", PROBE_DAY)
+        fetch.fetch_once("settlement_point_mapping", PROBE_DAY, force=True)
         assert len(client.calls) == 2
 
     def test_empty_response_raises_rather_than_writing_an_empty_table(
@@ -91,14 +99,14 @@ class TestFetchOnce:
         monkeypatch.setattr(fetch, "get_ercot", lambda: client)
         monkeypatch.setattr(fetch, "DATA_RAW", tmp_path)
         with pytest.raises(RuntimeError, match="without it"):
-            fetch.fetch_once("settlement_point_mapping")
+            fetch.fetch_once("settlement_point_mapping", PROBE_DAY)
         assert not list(tmp_path.rglob("*.parquet"))
 
     def test_written_table_is_readable_by_the_zone_mapper(self, stub_mapping):
         """End to end: what fetch writes must be what mapping.py can consume."""
         from src.transform.mapping import build_zone_map
         _, root = stub_mapping
-        fetch.fetch_once("settlement_point_mapping")
+        fetch.fetch_once("settlement_point_mapping", PROBE_DAY)
         df = pd.read_parquet(root / "settlement_point_mapping"
                              / "settlement_point_mapping.parquet")
         assert build_zone_map(df) == {"N1": "LZ_WEST", "N2": "LZ_NORTH"}

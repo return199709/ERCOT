@@ -96,13 +96,18 @@ def snapshot_path(dataset: str) -> Path:
     return DATA_RAW / dataset / f"{dataset}.parquet"
 
 
-def fetch_once(dataset_name: str, force: bool = False,
+def fetch_once(dataset_name: str, day: date_cls, force: bool = False,
                verbose: bool = False) -> int:
     """Fetch a point-in-time reference table a single time.
 
     Reference tables such as the settlement point list have no per-day
     dimension. Looping them over a date range would re-download the same
     table once per day and write dozens of identical partitions.
+
+    A date is still required even though the gridstatus signature defaults it
+    to None: the @support_date_range decorator raises
+    "Must supply either 'date' or 'start'" when it is omitted. One snapshot is
+    taken as of `day` and reused for the whole period.
     """
     spec = ds.get(dataset_name)
     out_path = snapshot_path(dataset_name)
@@ -113,7 +118,7 @@ def fetch_once(dataset_name: str, force: bool = False,
         return 0
 
     client = get_ercot_api() if spec.client == "api" else get_ercot()
-    df = _call_with_backoff(getattr(client, spec.method), None, verbose)
+    df = _call_with_backoff(getattr(client, spec.method), day, verbose)
 
     if df is None or df.empty:
         raise RuntimeError(
@@ -179,7 +184,7 @@ def fetch_range(
     ensure_dirs()
 
     if ds.get(dataset_name).once:
-        n = fetch_once(dataset_name, force=force, verbose=verbose)
+        n = fetch_once(dataset_name, start, force=force, verbose=verbose)
         return {"days_fetched": 1 if n else 0, "days_skipped": 0 if n else 1,
                 "rows": n}
 

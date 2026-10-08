@@ -163,25 +163,87 @@ class TestTrend:
 
 
 class TestRenewables:
-    def test_prepare_generation_floors_to_hour(self):
-        df = pd.DataFrame({
-            "Interval Start": pd.date_range("2025-06-11", periods=4, freq="15min",
-                                            tz="UTC"),
-            "Actual": [100.0, 200.0, 300.0, 400.0],
-        })
-        out = renewables.prepare_generation(df, "wind")
+    """Fixtures mirror the REAL ERCOT layout, confirmed against the live feed.
+
+    Both feeds are wide: a `GEN <REGION>` column per region, plus
+    `COP HSL <REGION>` capacity columns that must never be read as output.
+    Wind and solar use different geographies.
+    """
+
+    WIND_COLUMNS = ["GEN COASTAL", "GEN NORTH", "GEN PANHANDLE", "GEN SOUTH",
+                    "GEN WEST", "GEN SYSTEM WIDE"]
+    SOLAR_COLUMNS = ["GEN CenterEast", "GEN CenterWest", "GEN FarEast",
+                     "GEN FarWest", "GEN NorthWest", "GEN SouthEast",
+                     "GEN SYSTEM WIDE"]
+
+    def _wind(self, periods=4, freq="15min"):
+        idx = pd.date_range("2025-06-11", periods=periods, freq=freq, tz="UTC")
+        df = pd.DataFrame({"Interval Start": idx})
+        for i, col in enumerate(self.WIND_COLUMNS):
+            df[col] = [100.0 * (i + 1) + j * 100 for j in range(periods)]
+        # Capacity columns that must be ignored.
+        for col in self.WIND_COLUMNS:
+            df[col.replace("GEN ", "COP HSL ")] = 9999.0
+        return df
+
+    def test_finds_only_generation_columns_not_capacity(self):
+        found = renewables.generation_columns(self._wind())
+        assert set(found) == {"COASTAL", "NORTH", "PANHANDLE", "SOUTH",
+                              "WEST", "SYSTEM WIDE"}
+
+    def test_capacity_columns_are_never_treated_as_output(self):
+        """COP HSL is High Sustained Limit -- capacity, not generation."""
+        out = renewables.prepare_generation(self._wind(), "wind")
+        assert not any("9999" in str(v) for v in out.values.ravel())
+        assert not any("hsl" in c.lower() for c in out.columns)
+
+    def test_averages_subhourly_rows_to_the_hour(self):
+        out = renewables.prepare_generation(self._wind(), "wind", ["WEST"])
         assert len(out) == 1
-        assert out["wind_mw"].iloc[0] == 250.0
+        # GEN WEST is the 5th column: 500,600,700,800 -> mean 650
+        assert out["wind_west_mw"].iloc[0] == 650.0
+
+    def test_region_names_normalised(self):
+        out = renewables.prepare_generation(self._wind(), "wind", ["SYSTEM WIDE"])
+        assert "wind_system_wide_mw" in out.columns
+
+    def test_solar_uses_its_own_geography(self):
+        idx = pd.date_range("2025-06-11", periods=2, freq="h", tz="UTC")
+        df = pd.DataFrame({"Interval Start": idx})
+        for col in self.SOLAR_COLUMNS:
+            df[col] = 50.0
+        found = renewables.generation_columns(df)
+        assert "FarWest" in found
+        # The live solar feed has no Panhandle or West at all.
+        assert "PANHANDLE" not in found and "WEST" not in found
+
+    def test_requesting_a_wind_region_from_solar_raises(self):
+        """Wind and solar geographies differ; a silent drop would hide a series."""
+        idx = pd.date_range("2025-06-11", periods=2, freq="h", tz="UTC")
+        df = pd.DataFrame({"Interval Start": idx})
+        for col in self.SOLAR_COLUMNS:
+            df[col] = 50.0
+        with pytest.raises(KeyError, match="different"):
+            renewables.prepare_generation(df, "solar", ["PANHANDLE"])
+
+    def test_no_generation_columns_raises_rather_than_substituting(self):
+        df = pd.DataFrame({"Interval Start": [pd.Timestamp("2025-06-11", tz="UTC")],
+                           "COP HSL WEST": [100.0]})
+        with pytest.raises(KeyError, match="capacity"):
+            renewables.prepare_generation(df, "wind")
+
+    def test_empty_frame_is_safe(self):
+        assert renewables.prepare_generation(pd.DataFrame(), "wind").empty
 
     def test_correlation_requires_enough_pairs(self, synthetic_basis):
         gen = pd.DataFrame({
             "hour_start_utc": pd.to_datetime(
                 synthetic_basis["interval_start_utc"]).dt.floor("h").unique(),
         })
-        gen["wind_mw"] = range(len(gen))
+        gen["wind_west_mw"] = range(len(gen))
         joined = renewables.join_basis_to_generation(synthetic_basis, gen)
         # 24 hourly pairs per node is below the 30-pair floor -> not reported
         assert renewables.correlations(joined).empty
 
-    def test_no_generation_columns_returns_empty(self, synthetic_basis):
+    def test_no_generation_columns_returns_empty_correlations(self, synthetic_basis):
         assert renewables.correlations(synthetic_basis).empty

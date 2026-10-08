@@ -32,6 +32,7 @@ from dotenv import load_dotenv
 
 from src.analysis import constraints as constraints_mod
 from src.analysis import renewables as renewables_mod
+from src.config import SOLAR_FOCUS_REGIONS, WIND_FOCUS_REGIONS
 from src.ingest import datasets as ds
 from src.ingest.client import (
     MissingCredentialsError, REQUIRED_VARS, get_ercot, get_ercot_api,
@@ -66,8 +67,6 @@ COLUMN_CONTRACTS: list[tuple[str, str, list[str], bool]] = [
     ("sced_shadow_prices", "shadow price",
      constraints_mod.SHADOW_PRICE_CANDIDATES, True),
     ("sced_shadow_prices", "timestamp", constraints_mod.TIME_CANDIDATES, True),
-    ("wind_by_region", "generation", renewables_mod.GENERATION_CANDIDATES, False),
-    ("solar_by_region", "generation", renewables_mod.GENERATION_CANDIDATES, False),
     ("system_load", "interval start", ["Interval Start"], False),
 ]
 
@@ -143,6 +142,34 @@ def validate_columns(dataset: str, df: pd.DataFrame) -> list[tuple[str, str, str
     return results
 
 
+# The wide renewable feeds need a structural check, not a name lookup.
+RENEWABLE_REGIONS = {
+    "wind_by_region": ("wind", WIND_FOCUS_REGIONS),
+    "solar_by_region": ("solar", SOLAR_FOCUS_REGIONS),
+}
+
+
+def validate_renewable(dataset: str, df: pd.DataFrame) -> list[tuple[str, str, str]]:
+    """Check the wide `GEN <REGION>` layout and that focus regions exist."""
+    fuel, focus = RENEWABLE_REGIONS[dataset]
+    found = renewables_mod.generation_columns(df)
+    if not found:
+        return [(FAIL, "generation columns",
+                 f"no '{renewables_mod.GENERATION_PREFIX}<REGION>' columns. "
+                 f"Actual: {sorted(df.columns)[:12]}")]
+
+    results = [(PASS, "generation columns",
+                f"{len(found)} regions: {sorted(found)}")]
+    missing = [r for r in focus if r not in found]
+    if missing:
+        results.append((FAIL, "focus regions",
+                        f"{missing} absent. Present: {sorted(found)}. "
+                        "Update the region list in src/config.py"))
+    else:
+        results.append((PASS, "focus regions", f"{focus} all present"))
+    return results
+
+
 def probe_dataset(name: str, day: date_cls, verbose: bool) -> tuple[str, str, list]:
     """Fetch one day and validate its columns."""
     spec = ds.get(name)
@@ -161,12 +188,16 @@ def probe_dataset(name: str, day: date_cls, verbose: bool) -> tuple[str, str, li
         expected = locations * spec.intervals_per_day
         detail += (f", {locations:,} locations "
                    f"({len(df):,} vs {expected:,} expected)")
+    if name in RENEWABLE_REGIONS:
+        return PASS, detail, validate_renewable(name, df)
     return PASS, detail, validate_columns(name, df)
 
 
-def probe_mapping(verbose: bool) -> tuple[str, str, list]:
+def probe_mapping(day: date_cls, verbose: bool) -> tuple[str, str, list]:
     try:
-        df = get_ercot().get_settlement_points_electrical_bus_mapping(verbose=verbose)
+        df = get_ercot().get_settlement_points_electrical_bus_mapping(
+            date=day.isoformat(), verbose=verbose
+        )
     except Exception as exc:  # noqa: BLE001
         return FAIL, f"fetch failed: {type(exc).__name__}: {str(exc)[:160]}", []
     if df is None or df.empty:
@@ -214,7 +245,7 @@ def run(day: date_cls, verbose: bool = False) -> int:
         return 2
 
     print("\n3. Settlement point -> load zone mapping (basis depends on this)")
-    status, detail, cols = probe_mapping(verbose)
+    status, detail, cols = probe_mapping(day, verbose)
     report(status, "settlement_point_mapping", detail, 1)
     for s, concept, d in cols:
         report(s, concept, d, 2)

@@ -8,33 +8,72 @@ from __future__ import annotations
 
 import pandas as pd
 
+from src.config import GENERATION_PREFIX
 from src.analysis.common import resolve_column
 
-GENERATION_CANDIDATES = [
-    "Actual", "actual", "GEN_SYSTEM_WIDE", "Actual System Wide",
-    "System Wide Actual", "generation_mw",
-]
 TIME_CANDIDATES = ["interval_start_utc", "Interval Start", "Timestamp"]
 
 
-def prepare_generation(df: pd.DataFrame, label: str,
-                       region_column: str | None = None,
-                       region: str | None = None) -> pd.DataFrame:
-    """Reduce a wind/solar feed to (hour_start_utc, <label>_mw)."""
+def normalise_region(region: str) -> str:
+    """'SYSTEM WIDE' -> 'system_wide', 'FarWest' -> 'farwest'."""
+    return "_".join(region.lower().split())
+
+
+def generation_columns(df: pd.DataFrame) -> dict[str, str]:
+    """Map region -> column for the actual-generation columns only.
+
+    Both feeds are wide, with a `GEN <REGION>` column per region. The
+    `COP HSL <REGION>` columns alongside them are High Sustained Limit, i.e.
+    available capacity, not output -- correlating basis against capacity
+    instead of generation would be a silent and badly wrong analysis, so only
+    the GEN prefix is matched.
+    """
+    return {
+        col[len(GENERATION_PREFIX):].strip(): col
+        for col in df.columns
+        if col.startswith(GENERATION_PREFIX)
+    }
+
+
+def prepare_generation(df: pd.DataFrame, fuel: str,
+                       regions: list[str] | None = None) -> pd.DataFrame:
+    """Reduce a wide wind/solar feed to hourly generation per region.
+
+    Returns `hour_start_utc` plus one `<fuel>_<region>_mw` column per region.
+    Unknown region names are reported rather than silently dropped: a renamed
+    ERCOT region would otherwise quietly remove a series from the analysis.
+    """
     if df.empty:
-        return pd.DataFrame(columns=["hour_start_utc", f"{label}_mw"])
+        return pd.DataFrame(columns=["hour_start_utc"])
 
-    time_col = resolve_column(df, TIME_CANDIDATES, f"{label} timestamp")
-    gen_col = resolve_column(df, GENERATION_CANDIDATES, f"{label} generation")
+    time_col = resolve_column(df, TIME_CANDIDATES, f"{fuel} timestamp")
+    available = generation_columns(df)
+    if not available:
+        raise KeyError(
+            f"No '{GENERATION_PREFIX}<REGION>' columns found in the {fuel} "
+            f"feed. Available columns: {sorted(df.columns)[:15]}. The feed "
+            "layout has changed; do not substitute a capacity column."
+        )
 
-    work = df
-    if region_column and region:
-        work = work[work[region_column].astype(str).str.contains(region, case=False,
-                                                                 na=False)]
+    if regions is None:
+        selected = available
+    else:
+        selected = {r: c for r, c in available.items() if r in regions}
+        missing = [r for r in regions if r not in available]
+        if missing:
+            raise KeyError(
+                f"{fuel} regions {missing} are not in this feed. Present: "
+                f"{sorted(available)}. Wind and solar use different "
+                "geographies -- check src/config.py rather than guessing."
+            )
+
     out = pd.DataFrame({
-        "hour_start_utc": pd.to_datetime(work[time_col], utc=True).dt.floor("h"),
-        f"{label}_mw": pd.to_numeric(work[gen_col], errors="coerce"),
+        "hour_start_utc": pd.to_datetime(df[time_col], utc=True).dt.floor("h")
     })
+    for region, col in selected.items():
+        out[f"{fuel}_{normalise_region(region)}_mw"] = pd.to_numeric(
+            df[col], errors="coerce"
+        )
     return out.groupby("hour_start_utc", as_index=False).mean()
 
 

@@ -123,3 +123,38 @@ member nodes. ERCOT hub weights are defined over *buses* and are not part of
 these feeds, so a non-zero difference is expected. The function **reports the
 discrepancy and does not assert a match** — if the weights turn out not to be
 recoverable, that is itself the finding.
+
+## 13. Renewable region taxonomies differ between wind and solar
+
+Confirmed against the live feeds, not assumed. Both the wind and solar
+reports are **wide**: one `GEN <REGION>` column per region, alongside
+`COP HSL <REGION>` columns that are High Sustained Limit, i.e. available
+capacity rather than output.
+
+| Feed | Regions |
+|---|---|
+| Wind | `COASTAL`, `NORTH`, `PANHANDLE`, `SOUTH`, `WEST`, `SYSTEM WIDE` |
+| Solar | `CenterEast`, `CenterWest`, `FarEast`, `FarWest`, `NorthWest`, `SouthEast`, `SYSTEM WIDE` |
+
+Two consequences:
+
+- **The two feeds cannot be compared region-for-region.** There is no solar
+  `WEST` or `PANHANDLE` at all. The nearest solar analogues to the windy west
+  are `FarWest` and `NorthWest`, which is an **assumption** about geographic
+  correspondence, not an ERCOT-defined mapping.
+- **Only `GEN *` columns are read.** Correlating basis against `COP HSL`
+  would be correlating against capacity instead of generation — a silent and
+  badly wrong analysis. Requesting a region a feed does not have raises
+  rather than dropping the series.
+
+Focus regions are `WIND_FOCUS_REGIONS` and `SOLAR_FOCUS_REGIONS` in
+`src/config.py`.
+
+## 14. The settlement point mapping needs an explicit date
+
+`get_settlement_points_electrical_bus_mapping` has `date=None` in its
+signature, but the `@support_date_range` decorator rejects the call without
+one. The mapping is fetched as a single snapshot as of the ingest start date
+and reused for the whole period. Settlement points that appear or disappear
+within the period are reported by the quality checks (§5) rather than
+reconciled against multiple snapshots.

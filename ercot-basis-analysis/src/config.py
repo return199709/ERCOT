@@ -70,8 +70,24 @@ TOP_CONSTRAINTS_N = 15
 STORAGE_TOP_HOURS = 4             # top-4 minus bottom-4 hour spread
 BASIS_PERCENTILES = (0.05, 0.95)  # P5 / P95
 
-# Regions of interest for the renewable-correlation analysis.
-RENEWABLE_FOCUS_REGIONS = ["West", "Panhandle"]
+# --- Renewable region taxonomies ------------------------------------------
+# The wind and solar feeds are WIDE: one `GEN <REGION>` column per region,
+# alongside `COP HSL <REGION>` capacity columns that are NOT actuals.
+#
+# The two feeds use entirely different geographies, confirmed against the live
+# feeds. They therefore cannot be compared region-for-region, and there is no
+# solar "Panhandle" or "West" at all -- the nearest solar analogues to the
+# windy west are FarWest and NorthWest.
+WIND_REGIONS = ["COASTAL", "NORTH", "PANHANDLE", "SOUTH", "WEST", "SYSTEM WIDE"]
+SOLAR_REGIONS = ["CenterEast", "CenterWest", "FarEast", "FarWest",
+                 "NorthWest", "SouthEast", "SYSTEM WIDE"]
+
+# Focus regions for the basis-versus-renewables analysis.
+WIND_FOCUS_REGIONS = ["WEST", "PANHANDLE"]
+SOLAR_FOCUS_REGIONS = ["FarWest", "NorthWest"]
+
+# Prefix identifying actual generation columns in both feeds.
+GENERATION_PREFIX = "GEN "
 
 
 def ensure_dirs() -> None:

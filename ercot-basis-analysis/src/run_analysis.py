@@ -19,7 +19,7 @@ from src import db
 from src.analysis import (
     basis_stats, constraints, da_rt, negative_prices, renewables, storage, trend,
 )
-from src.config import RENEWABLE_FOCUS_REGIONS, ensure_dirs
+from src.config import SOLAR_FOCUS_REGIONS, WIND_FOCUS_REGIONS, ensure_dirs
 from src.transform import quality
 from src.transform.basis import compute_basis, da_rt_spread
 from src.transform.mapping import build_zone_map
@@ -142,24 +142,24 @@ def run(verbose: bool = False) -> int:
         print("  shadow prices absent: analysis 5 (constraints) skipped")
 
     # --- analysis 3 (renewables) -----------------------------------------
+    # Both feeds are wide (one GEN <REGION> column per region) and use
+    # different geographies, so each is prepared against its own region list.
     wind = _load("wind_by_region")
     solar = _load("solar_by_region")
     gens = []
-    for frame, label in ((wind, "wind"), (solar, "solar")):
-        if frame is not None and not frame.empty:
-            region_col = next(
-                (c for c in frame.columns if "region" in c.lower()), None
-            )
-            for region in (RENEWABLE_FOCUS_REGIONS if region_col else [None]):
-                try:
-                    prepared = renewables.prepare_generation(
-                        frame, f"{label}_{region}".lower() if region else label,
-                        region_col, region,
-                    )
-                    if not prepared.empty:
-                        gens.append(prepared)
-                except KeyError as exc:
-                    print(f"  {label} generation unusable: {exc}", file=sys.stderr)
+    for frame, fuel, focus in ((wind, "wind", WIND_FOCUS_REGIONS),
+                               (solar, "solar", SOLAR_FOCUS_REGIONS)):
+        if frame is None or frame.empty:
+            continue
+        try:
+            prepared = renewables.prepare_generation(frame, fuel, focus)
+            if not prepared.empty:
+                gens.append(prepared)
+                print(f"  {fuel}: {len(prepared):,} hours, "
+                      f"{len(prepared.columns) - 1} region series")
+        except KeyError as exc:
+            print(f"  {fuel} generation unusable: {exc}", file=sys.stderr)
+
     if gens:
         joined = renewables.join_basis_to_generation(usable, *gens)
         corr = renewables.correlations(joined)
