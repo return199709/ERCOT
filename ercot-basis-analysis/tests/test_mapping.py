@@ -3,7 +3,11 @@
 import pandas as pd
 
 from src.transform.mapping import (
-    HUB, LOAD_ZONE, RESOURCE_NODE, assign_hub, build_zone_map,
+    HUB,
+    LOAD_ZONE,
+    RESOURCE_NODE,
+    assign_hub,
+    build_zone_map,
     classify_location,
 )
 

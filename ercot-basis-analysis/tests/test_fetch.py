@@ -5,10 +5,10 @@ from datetime import date
 import pandas as pd
 import pytest
 
-PROBE_DAY = date(2025, 6, 1)
-
 from src.ingest import datasets as ds
 from src.ingest import fetch
+
+PROBE_DAY = date(2025, 6, 1)
 
 
 class TestDatasetRegistry:

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.config import BASIS_PERCENTILES, WORST_NODES_TOP_N
 from src.analysis.common import require
+from src.config import BASIS_PERCENTILES, WORST_NODES_TOP_N
 
 P_LOW, P_HIGH = BASIS_PERCENTILES
 

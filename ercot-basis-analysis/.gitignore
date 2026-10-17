@@ -19,5 +19,9 @@ __pycache__/
 # Notebooks
 .ipynb_checkpoints/
 
+# Agent skill symlinks that `streamlit run` offers to install into the clone
+.agents/
+.claude/skills/
+
 # OS
 .DS_Store

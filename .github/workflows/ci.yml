@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+    paths:
+      - "ercot-basis-analysis/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "ercot-basis-analysis/**"
+      - ".github/workflows/ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: lint and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ercot-basis-analysis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ercot-basis-analysis/uv.lock
+      - run: uv sync --frozen
+      - run: uv run ruff check src app tests
+      - run: uv run pytest -q
+        env:
+          # The suite runs on labelled synthetic fixtures only. No ERCOT
+          # credentials or network access are needed or provided.
+          ERCOT_API_USERNAME: ""
+          ERCOT_API_PASSWORD: ""
+          ERCOT_PUBLIC_API_SUBSCRIPTION_KEY: ""
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Scan the full history of the pushed ref, not just the tip.
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

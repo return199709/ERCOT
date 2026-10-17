@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.config import GENERATION_PREFIX
 from src.analysis.common import resolve_column
+from src.config import GENERATION_PREFIX
 
 TIME_CANDIDATES = ["interval_start_utc", "Interval Start", "Timestamp"]
 

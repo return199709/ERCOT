@@ -4,14 +4,13 @@ These tests protect promises made in README.md and ASSUMPTIONS.md that are
 easy to break silently during later work.
 """
 
-from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from src.config import PROJECT_ROOT, REPORTS
-from src.transform.quality import find_gaps
 from src.transform.mapping import assign_hub
+from src.transform.quality import find_gaps
 
 SYNTHETIC_MARKERS = ("SYNTH_NODE", "synthetic_dam", "synthetic_rtm")
 
@@ -54,15 +53,29 @@ class TestFindingsHonesty:
     def test_findings_file_exists(self):
         assert (REPORTS / "findings.md").exists()
 
-    def test_findings_declares_status_when_no_data_ingested(self):
-        raw = PROJECT_ROOT / "data" / "raw"
-        has_data = raw.exists() and any(raw.rglob("*.parquet"))
-        text = (REPORTS / "findings.md").read_text().lower()
-        if not has_data:
-            assert "not yet produced" in text, (
-                "No data is ingested, so findings.md must say results do not "
-                "exist rather than presenting numbers."
-            )
+    def test_findings_states_provenance(self):
+        """Every number in findings.md must be traceable to a named run.
+
+        The report may carry results produced on another machine (the raw
+        data is gitignored), so the presence of local Parquet is not the
+        test. The test is that the report says which period it covers and
+        where its figures came from, or says plainly that none exist yet.
+        """
+        # Collapse the markdown's hard line wraps before phrase matching.
+        text = " ".join((REPORTS / "findings.md").read_text().lower().split())
+        declares_none = "not yet produced" in text
+        names_a_run = "status:" in text and "2025-06-01 to 2025-06-30" in text \
+            and "every number below is copied from that run" in text
+        assert declares_none or names_a_run, (
+            "findings.md must either say results are not yet produced, or "
+            "state the period and the run its numbers were copied from."
+        )
+
+    def test_findings_contains_no_synthetic_nodes(self):
+        text = (REPORTS / "findings.md").read_text()
+        assert "SYNTH_" not in text, (
+            "Synthetic fixture names must never appear in the findings."
+        )
 
 
 class TestNoSilentFilling:

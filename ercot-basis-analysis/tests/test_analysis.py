@@ -4,7 +4,13 @@ import pandas as pd
 import pytest
 
 from src.analysis import (
-    basis_stats, constraints, da_rt, negative_prices, renewables, storage, trend,
+    basis_stats,
+    constraints,
+    da_rt,
+    negative_prices,
+    renewables,
+    storage,
+    trend,
 )
 from src.analysis.common import resolve_column
 

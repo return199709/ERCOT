@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.config import STORAGE_TOP_HOURS
 from src.analysis.common import require
+from src.config import STORAGE_TOP_HOURS
 
 
 def daily_spread(prices: pd.DataFrame, value_col: str = "SPP",

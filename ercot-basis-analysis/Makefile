@@ -10,7 +10,7 @@
 MONTH ?= 2025-06
 DATASETS ?= dam_spp,rtm_spp,dam_shadow_prices,sced_shadow_prices,wind_by_region,solar_by_region,system_load
 
-.PHONY: help install doctor env-check inspect-mapping summary ingest ingest-mapping backfill analyze app test quality views clean
+.PHONY: help install doctor env-check inspect-mapping summary ingest ingest-mapping backfill analyze app test lint quality views clean
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -46,6 +46,9 @@ app: ## Launch the Streamlit dashboard
 
 test: ## Run the test suite
 	uv run pytest -q
+
+lint: ## Lint with ruff (same check CI runs)
+	uv run ruff check src app tests
 
 summary: ## Print a compact digest of every derived table (feeds the write-up)
 	uv run python -m src.summary

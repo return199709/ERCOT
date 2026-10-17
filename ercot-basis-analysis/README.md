@@ -10,9 +10,11 @@ via [`gridstatus`](https://github.com/gridstatus/gridstatus), landed as
 partitioned Parquet, queried with DuckDB, and surfaced through a Streamlit
 dashboard.
 
-> **Current status:** the pipeline is built and tested (83 tests passing), but
-> **no data has been ingested and no findings have been produced.** See
-> [`reports/findings.md`](reports/findings.md).
+> **Current status:** built, tested (`make test`), and run end to end on
+> June 2025 (all eight datasets, every analysis, the dashboard). First results
+> and their caveats are in [`reports/findings.md`](reports/findings.md). A
+> multi-month backfill has not been run yet, so the year-over-year trend and
+> constraint seasonality analyses have no data behind them.
 
 ## Setup
 
@@ -44,7 +46,9 @@ make doctor                  # validate credentials, connectivity and columns FI
 make ingest-mapping          # settlement point -> load zone (required for basis)
 make ingest MONTH=2025-06    # validate on one month before backfilling
 make analyze                 # transform, quality checks, all seven analyses
+make summary                 # text digest of every derived table
 make app                     # Streamlit dashboard
+make lint                    # ruff
 make test                    # pytest
 ```
 
@@ -111,6 +115,10 @@ These are enforced in code, not just documented:
   rather than a spread built from fewer than two disjoint windows.
 - **Hub assignment is never guessed.** A node whose load zone is unknown is
   reported as unmapped and excluded, rather than attributed to a plausible hub.
+  Two lookups are allowed: ERCOT's settlement point list, and inheritance from
+  a listed node whose price series is identical over the whole period (same
+  electrical bus, so same zone). Groups whose mapped members disagree recover
+  nothing.
 - **DST is handled explicitly.** Expected interval counts are 23/92 on
   spring-forward days and 25/100 on fall-back days; all joins key on UTC.
 - **Synthetic data is confined to tests** and is labelled as such. It never

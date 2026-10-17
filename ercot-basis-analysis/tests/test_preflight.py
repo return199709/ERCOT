@@ -4,8 +4,14 @@ import pandas as pd
 import pytest
 
 from src.ingest.preflight import (
-    FAIL, PASS, WARN, COLUMN_CONTRACTS, MAPPING_CONTRACTS,
-    check_credentials, check_host, validate_columns,
+    COLUMN_CONTRACTS,
+    FAIL,
+    MAPPING_CONTRACTS,
+    PASS,
+    WARN,
+    check_credentials,
+    check_host,
+    validate_columns,
 )
 
 

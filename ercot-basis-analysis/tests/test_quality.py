@@ -4,7 +4,10 @@ import pandas as pd
 
 from src.config import ERCOT_TZ
 from src.transform.quality import (
-    check, find_duplicates, find_gaps, find_name_changes,
+    check,
+    find_duplicates,
+    find_gaps,
+    find_name_changes,
     validate_hub_reconstruction,
 )
 
@@ -97,12 +100,12 @@ class TestWhollyAbsentLocationDays:
         """spec maps day offset -> locations present, 24 hourly rows each."""
         rows = []
         for offset, locations in spec.items():
-            base = pd.Timestamp("2025-06-01", tz=ERCOT_TZ) + pd.Timedelta(days=offset)
+            base = pd.Timestamp("2025-06-01", tz=ERCOT_TZ) + pd.Timedelta(offset, unit="D")
             for location in locations:
                 for hour in range(24):
                     rows.append({
                         "Location": location,
-                        "interval_start_utc": (base + pd.Timedelta(hours=hour))
+                        "interval_start_utc": (base + pd.Timedelta(hour, unit="h"))
                             .tz_convert("UTC"),
                         "SPP": 30.0,
                     })
@@ -179,7 +182,7 @@ class TestIdenticalSeries:
                 rows.append({
                     "Location": location,
                     "interval_start_utc": pd.Timestamp("2025-06-01", tz="UTC")
-                        + pd.Timedelta(hours=hour),
+                        + pd.Timedelta(hour, unit="h"),
                     "SPP": value,
                 })
         return pd.DataFrame(rows)

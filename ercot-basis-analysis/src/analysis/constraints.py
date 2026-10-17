@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.config import TOP_CONSTRAINTS_N
 from src.analysis.common import resolve_column
+from src.config import TOP_CONSTRAINTS_N
 
 # Interval length by market, in hours.
 DAM_INTERVAL_HOURS = 1.0

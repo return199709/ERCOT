@@ -9,7 +9,11 @@ import pandas as pd
 import pytest
 
 from src.analysis.dispatch import (
-    BatterySpec, annualise, decompose, dispatch_day, dispatch_series,
+    BatterySpec,
+    annualise,
+    decompose,
+    dispatch_day,
+    dispatch_series,
 )
 
 # 100 MWh / 4-hour battery.

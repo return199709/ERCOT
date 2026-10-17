@@ -35,7 +35,10 @@ from src.analysis import renewables as renewables_mod
 from src.config import SOLAR_FOCUS_REGIONS, WIND_FOCUS_REGIONS
 from src.ingest import datasets as ds
 from src.ingest.client import (
-    MissingCredentialsError, REQUIRED_VARS, get_ercot, get_ercot_api,
+    REQUIRED_VARS,
+    MissingCredentialsError,
+    get_ercot,
+    get_ercot_api,
 )
 
 ERCOT_HOSTS = ("api.ercot.com", "ercotb2c.b2clogin.com", "www.ercot.com")

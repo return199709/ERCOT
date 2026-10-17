@@ -47,7 +47,8 @@ def main() -> int:
         end = pd.to_datetime(basis["interval_start_utc"]).max()
         print(f"  period            {start:%Y-%m-%d} to {end:%Y-%m-%d}")
         print(f"  node-intervals    {len(basis):,}")
-        print(f"  nodes with basis  {basis['basis'].notna().groupby(basis['Location']).any().sum():,}")
+        with_basis = basis["basis"].notna().groupby(basis["Location"]).any().sum()
+        print(f"  nodes with basis  {with_basis:,}")
         print(f"  hubs referenced   {sorted(basis['assigned_hub'].dropna().unique())}")
 
     section("SHARED PRICE SERIES (read before any ranking)")
@@ -124,7 +125,10 @@ def main() -> int:
         if not biased.empty:
             print(f"  direction split: "
                   f"{biased['bias_direction'].value_counts().to_dict()}\n")
-        show(da_rt, "da_rt_by_node",
+        strongest = biased.reindex(biased["t_stat"].abs()
+                                   .sort_values(ascending=False).index)
+        print("  strongest flagged biases (by |t|):")
+        show(strongest, "da_rt_by_node",
              ["Location", "n", "mean_spread", "std_spread", "t_stat",
               "bias_direction"], 10)
 
@@ -155,7 +159,7 @@ def main() -> int:
     section("DATA QUALITY")
     from src.config import QUALITY_REPORTS
     for path in sorted(QUALITY_REPORTS.glob("*.md")):
-        head = [l for l in path.read_text().splitlines() if l.startswith("- ")]
+        head = [line for line in path.read_text().splitlines() if line.startswith("- ")]
         print(f"\n  {path.name}")
         for line in head:
             print(f"    {line}")
