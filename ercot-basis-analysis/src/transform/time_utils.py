@@ -17,12 +17,19 @@ from __future__ import annotations
 
 import pandas as pd
 from pandas.tseries.holiday import (
-    AbstractHolidayCalendar, Holiday, USLaborDay, USMemorialDay,
-    USThanksgivingDay, nearest_workday,
+    AbstractHolidayCalendar,
+    Holiday,
+    USLaborDay,
+    USMemorialDay,
+    USThanksgivingDay,
+    nearest_workday,
 )
 
 from src.config import (
-    ERCOT_TZ, PEAK_END_HOUR, PEAK_START_HOUR, PEAK_WEEKDAYS,
+    ERCOT_TZ,
+    PEAK_END_HOUR,
+    PEAK_START_HOUR,
+    PEAK_WEEKDAYS,
 )
 
 
@@ -91,11 +98,19 @@ def add_time_parts(df: pd.DataFrame, col: str = "Interval Start") -> pd.DataFram
 
 
 def is_peak(local: pd.Series) -> pd.Series:
-    """ERCOT 5x16: HE 07:00-22:00 CPT, Mon-Fri, excluding NERC holidays."""
+    """ERCOT 5x16: HE 07:00-22:00 CPT, Mon-Fri, excluding NERC holidays.
+
+    The peak constants are *hour-ending* numbers, as ERCOT quotes them, but
+    `local` holds interval *start* times. Hour-ending 07 is the interval that
+    starts at 06:00, and hour-ending 22 is the one that starts at 21:00, so
+    the start-hour window is [PEAK_START_HOUR - 1, PEAK_END_HOUR - 1]. That is
+    sixteen hours. An earlier version tested [7, 21] and silently produced a
+    fifteen-hour peak that excluded the 06:00 interval.
+    """
     if local.empty:
         return pd.Series([], dtype=bool, index=local.index)
 
-    hour_ok = local.dt.hour.between(PEAK_START_HOUR, PEAK_END_HOUR - 1)
+    hour_ok = local.dt.hour.between(PEAK_START_HOUR - 1, PEAK_END_HOUR - 1)
     day_ok = local.dt.weekday.isin(PEAK_WEEKDAYS)
 
     holidays = nerc_holidays(local.min().date(), local.max().date())
@@ -114,7 +129,7 @@ def expected_intervals(day: pd.Timestamp, per_day: int) -> int:
     """
     day = pd.Timestamp(day).normalize()
     start = day.tz_localize(ERCOT_TZ, nonexistent="shift_forward")
-    end = (day + pd.Timedelta(days=1)).tz_localize(
+    end = (day + pd.Timedelta(1, unit="D")).tz_localize(
         ERCOT_TZ, nonexistent="shift_forward"
     )
     hours = (end - start).total_seconds() / 3600

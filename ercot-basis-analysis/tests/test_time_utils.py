@@ -8,7 +8,11 @@ import pytest
 
 from src.config import ERCOT_TZ
 from src.transform.time_utils import (
-    add_time_parts, ensure_utc, expected_intervals, is_peak, nerc_holidays,
+    add_time_parts,
+    ensure_utc,
+    expected_intervals,
+    is_peak,
+    nerc_holidays,
 )
 
 # 2025 US DST transitions
@@ -42,12 +46,19 @@ class TestIsPeak:
         assert not is_peak(self._local(["2025-06-11 03:00"])).iloc[0]
 
     def test_hour_boundaries(self):
-        # HE 07:00 inclusive, HE 22:00 exclusive
+        # 5x16 is hour-ending 07 through hour-ending 22. In interval-start
+        # terms that is 06:00 inclusive through 22:00 exclusive.
         vals = is_peak(self._local(
-            ["2025-06-11 06:59", "2025-06-11 07:00",
+            ["2025-06-11 05:59", "2025-06-11 06:00",
              "2025-06-11 21:59", "2025-06-11 22:00"]
         ))
         assert list(vals) == [False, True, True, False]
+
+    def test_weekday_has_sixteen_peak_hours(self):
+        # Regression: a [7, 21] window gave 15 hours; June 2025 showed
+        # 315 on-peak hours per node, which is 21 weekdays x 15.
+        stamps = [f"2025-06-11 {h:02d}:00" for h in range(24)]  # a Wednesday
+        assert int(is_peak(self._local(stamps)).sum()) == 16
 
     def test_weekend_is_offpeak(self):
         assert not is_peak(self._local(["2025-06-14 10:00"])).iloc[0]  # Saturday

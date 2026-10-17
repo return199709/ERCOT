@@ -49,7 +49,8 @@ ZONE_TO_HUB = {
 
 # --- Peak definition ------------------------------------------------------
 # ERCOT 5x16: hours ending 07:00-22:00 CPT, Monday-Friday, excluding NERC
-# holidays. Everything else is off-peak.
+# holidays. Everything else is off-peak. These are HOUR-ENDING numbers;
+# time_utils.is_peak converts them to interval starts (06:00 through 21:00).
 PEAK_START_HOUR = 7
 PEAK_END_HOUR = 22
 PEAK_WEEKDAYS = (0, 1, 2, 3, 4)  # Monday=0
