@@ -17,17 +17,31 @@ import pandas as pd
 
 from src import db
 from src.analysis import (
-    basis_stats, constraints, da_rt, dispatch, negative_prices, renewables,
-    storage, trend,
+    basis_stats,
+    constraints,
+    da_rt,
+    dispatch,
+    negative_prices,
+    renewables,
+    storage,
+    trend,
 )
 from src.config import (
-    BATTERY_DEGRADATION_COST_PER_MWH, BATTERY_DURATION_HOURS,
-    BATTERY_POWER_MW, BATTERY_ROUND_TRIP_EFFICIENCY, SOLAR_FOCUS_REGIONS,
-    TRADING_HUBS, WIND_FOCUS_REGIONS, ensure_dirs,
+    BATTERY_DEGRADATION_COST_PER_MWH,
+    BATTERY_DURATION_HOURS,
+    BATTERY_POWER_MW,
+    BATTERY_ROUND_TRIP_EFFICIENCY,
+    SOLAR_FOCUS_REGIONS,
+    TRADING_HUBS,
+    WIND_FOCUS_REGIONS,
+    ensure_dirs,
 )
 from src.transform import quality
 from src.transform.basis import compute_basis, da_rt_spread
-from src.transform.mapping import build_zone_map
+from src.transform.mapping import (
+    build_zone_map,
+    extend_zone_map_by_shared_series,
+)
 from src.transform.time_utils import add_time_parts, ensure_utc
 
 
@@ -84,12 +98,24 @@ def run(verbose: bool = False) -> int:
           f"period, {len(dam_report.duplicates)} duplicate keys, "
           f"{dam_report.null_prices} null prices")
     if not dam_report.gaps.empty:
-        print(f"  -> reported in reports/quality/dam_spp.md; gaps are never "
-              f"filled. Statistics carry an `n` column so a thin node is "
-              f"visible rather than silently equal-weighted.")
+        print("  -> reported in reports/quality/dam_spp.md; gaps are never "
+              "filled. Statistics carry an `n` column so a thin node is "
+              "visible rather than silently equal-weighted.")
 
     # --- basis -----------------------------------------------------------
     zone_map = _zone_map()
+    # Second lookup, not a guess: a point whose price series is identical to
+    # a listed node's over the whole period sits on the same bus, and so in
+    # the same zone. Conflicting or orphan groups recover nothing.
+    zone_map, recovered = extend_zone_map_by_shared_series(zone_map, dam)
+    if not recovered.empty:
+        written.append(str(db.write_processed(recovered, "zone_map_recovered")))
+        counts = recovered["status"].value_counts().to_dict()
+        print(f"  zone map: {counts.get('recovered', 0)} settlement points "
+              f"inherited a zone from a node sharing their price series; "
+              f"skipped {counts.get('skipped_no_mapped_member', 0)} with no "
+              f"mapped twin and {counts.get('skipped_zone_conflict', 0)} "
+              f"with conflicting zones")
     basis, unmapped = compute_basis(dam, zone_map)
     if unmapped:
         print(f"  WARNING: {len(unmapped)} settlement points could not be "

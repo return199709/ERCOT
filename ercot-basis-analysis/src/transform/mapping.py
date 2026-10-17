@@ -8,6 +8,11 @@ decision, not a lookup. This project uses the node's load zone as the proxy
 Nodes whose load zone cannot be determined are NEVER guessed. They are
 returned in an `unmapped` list so the caller can report them and exclude them,
 rather than silently attributing them to the wrong hub.
+
+Two sources are allowed, both lookups rather than inferences: the settlement
+point list (`build_zone_map`), and inheritance from a listed node whose price
+series is identical over the whole period, which means the same electrical bus
+(`extend_zone_map_by_shared_series`).
 """
 
 from __future__ import annotations
@@ -15,7 +20,11 @@ from __future__ import annotations
 import pandas as pd
 
 from src.config import (
-    HUB_PREFIX, LOAD_ZONE_PREFIX, REFERENCE_HUBS, TRADING_HUBS, ZONE_TO_HUB,
+    HUB_PREFIX,
+    LOAD_ZONE_PREFIX,
+    REFERENCE_HUBS,
+    TRADING_HUBS,
+    ZONE_TO_HUB,
 )
 
 HUB = "hub"
@@ -71,6 +80,73 @@ def build_zone_map(mapping_df: pd.DataFrame) -> dict[str, str]:
 
     pairs = mapping_df[[sp_col, zone_col]].dropna().drop_duplicates()
     return dict(zip(pairs[sp_col].astype(str), pairs[zone_col].astype(str)))
+
+
+def extend_zone_map_by_shared_series(
+    zone_map: dict[str, str],
+    prices: pd.DataFrame,
+    value_col: str = "SPP",
+) -> tuple[dict[str, str], pd.DataFrame]:
+    """Give unmapped settlement points the zone of a point they price with.
+
+    ERCOT's settlement point list names each resource node once, but the DAM
+    price feed carries extra names for the same electrical bus: unit-level
+    names such as `FOO_CC1` and `FOO_CC2` beside the `FOO_RN` the list knows.
+    Those extra names settle at the bus LMP, so their price series is
+    byte-identical to the listed node's, hour for hour.
+
+    This is a lookup, not a guess: an identical price series over the whole
+    period means the same bus, and the same bus is in exactly one load zone.
+    The rule is deliberately strict:
+
+    * a point is recovered only if every *mapped* member of its group sits in
+      one zone; a group whose mapped members disagree recovers nothing;
+    * a group with no mapped member recovers nothing;
+    * points already in `zone_map` are never changed.
+
+    Returns the extended map and a provenance table with one row per
+    recovered point: which node it inherited from, the zone, how many
+    intervals the two series agree on, and groups that were skipped and why.
+    """
+    # Imported here: quality -> time_utils -> config; no cycle, but keep the
+    # mapping module importable without pulling the quality stack.
+    from src.transform.quality import find_identical_series
+
+    columns = ["Location", "zone", "inherited_from", "intervals", "status"]
+    extended = dict(zone_map)
+    rows: list[dict] = []
+
+    groups = find_identical_series(prices, value_col)
+    if groups.empty:
+        return extended, pd.DataFrame(columns=columns)
+
+    for _, group in groups.iterrows():
+        members = [m.strip() for m in str(group["locations"]).split(",")]
+        nodes = [m for m in members if classify_location(m) == RESOURCE_NODE]
+        mapped = {m: zone_map[m] for m in nodes if m in zone_map}
+        unmapped = [m for m in nodes if m not in zone_map]
+        if not unmapped:
+            continue
+        zones = set(mapped.values())
+        if not mapped:
+            status, zone, source = "skipped_no_mapped_member", None, None
+        elif len(zones) > 1:
+            status, zone, source = "skipped_zone_conflict", None, None
+        else:
+            status, zone = "recovered", zones.pop()
+            source = sorted(mapped)[0]
+        for name in unmapped:
+            if status == "recovered":
+                extended[name] = zone
+            rows.append({
+                "Location": name,
+                "zone": zone,
+                "inherited_from": source,
+                "intervals": int(group["intervals"]),
+                "status": status,
+            })
+
+    return extended, pd.DataFrame(rows, columns=columns)
 
 
 def assign_hub(

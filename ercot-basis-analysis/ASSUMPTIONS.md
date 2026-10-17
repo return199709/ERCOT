@@ -37,6 +37,28 @@ a different reference without re-ingesting.
 returned in an `unmapped` list, excluded from basis, and reported. Assigning
 them a plausible-looking hub would produce confident and wrong numbers.
 
+## 1b. Zone inheritance through identical price series
+
+The settlement point list covers about 93% of the names in the DAM price feed
+(measured on the 2026-09-28 list against June 2025 prices by
+`make inspect-mapping`). The remainder are mostly unit-level names such as
+`FOO_CC1` beside a listed `FOO_RN`: different settlement point names for the
+same electrical bus, which therefore carry a byte-identical price series.
+
+**Assumption:** an unmapped point whose price series is identical, interval
+for interval over the whole period, to a listed node's series sits on the same
+bus and inherits that node's load zone. This is a lookup, not an inference,
+and the rule is strict: a group whose mapped members sit in different zones
+recovers nothing, a group with no mapped member recovers nothing, and listed
+points are never rewritten. Every recovered point is written to the
+`zone_map_recovered` table with the node it inherited from and the number of
+intervals the two series agree on, so the step is auditable and reversible.
+
+Implemented in `extend_zone_map_by_shared_series`; applied before basis is
+computed. The 88 resource nodes for which ERCOT's `Hub` column is populated
+are *not* used to override the load-zone proxy; that would be a change of
+policy rather than of coverage and is left as an open decision.
+
 ## 2. Node-to-zone source
 
 The node-to-zone lookup comes from ERCOT's settlement point list
@@ -64,6 +86,12 @@ NERC holidays (New Year's Day, Memorial Day, Independence Day, Labor Day,
 Thanksgiving, Christmas), observed on the nearest weekday.
 
 Some desks use 7×16. Change `PEAK_WEEKDAYS` in `src/config.py` to switch.
+
+The constants are hour-*ending* numbers, as ERCOT quotes them, and the code
+converts them to interval starts (06:00 through 21:00). Results produced before
+2026-10-17 used a 15-hour window that dropped the 06:00 interval; the June 2025
+on/off-peak table in `reports/findings.md` is marked accordingly and should be
+regenerated.
 
 ## 5. Missing data is never filled
 
