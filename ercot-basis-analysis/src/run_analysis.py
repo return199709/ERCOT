@@ -17,6 +17,7 @@ import pandas as pd
 
 from src import db
 from src.analysis import (
+    attribution,
     basis_stats,
     constraints,
     da_rt,
@@ -211,6 +212,27 @@ def run(verbose: bool = False) -> int:
         print(f"  constraints ranked: {len(ranked)} rows")
     else:
         print("  shadow prices absent: analysis 5 (constraints) skipped")
+
+    # --- analysis 5b: which constraints drive each node's basis ----------
+    # Basis is linear in DAM shadow prices with node-minus-hub shift factor
+    # differences as coefficients; those are estimated per node by least
+    # squares. Same-market fit: DAM basis on DAM shadow prices.
+    if dam_sp is not None:
+        by_node, contrib, by_constraint = attribution.attribute(usable, dam_sp)
+        if by_node.empty:
+            print("  attribution: no node had enough overlapping hours with "
+                  "the shadow price matrix; skipped", file=sys.stderr)
+        else:
+            written.append(str(db.write_processed(by_node, "attribution_by_node")))
+            written.append(str(db.write_processed(contrib, "attribution_contributions")))
+            written.append(str(db.write_processed(by_constraint,
+                                                  "attribution_by_constraint")))
+            print(f"  attribution: {len(by_node):,} nodes fitted on "
+                  f"{int(by_node['n_constraints'].iloc[0])} constraints; "
+                  f"median R² {by_node['r2'].median():.2f}; "
+                  f"{int((by_node['r2'] >= 0.5).sum()):,} nodes with R² >= 0.5")
+    else:
+        print("  DAM shadow prices absent: analysis 5b (attribution) skipped")
 
     # --- analysis 3 (renewables) -----------------------------------------
     # Both feeds are wide (one GEN <REGION> column per region) and use

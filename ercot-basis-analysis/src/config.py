@@ -77,6 +77,19 @@ BATTERY_DEGRADATION_COST_PER_MWH = 5.0
 # --- Analysis parameters --------------------------------------------------
 WORST_NODES_TOP_N = 25
 TOP_CONSTRAINTS_N = 15
+
+# --- Congestion attribution (analysis 5b) ---------------------------------
+# Node basis is regressed on the hourly DAM shadow prices of the top
+# constraints by congestion cost. Only constraints that bound for at least
+# ATTRIBUTION_MIN_BOUND_HOURS enter; a node is fitted only if it shares at
+# least ATTRIBUTION_MIN_HOURS hours with the shadow price matrix. The ridge
+# penalty is off (0.0): plain least squares, so coefficients read directly
+# as effective shift-factor differences. Raise it only to stabilise
+# constraints that always bind together, and say so in the write-up.
+ATTRIBUTION_TOP_K = 40
+ATTRIBUTION_MIN_BOUND_HOURS = 24
+ATTRIBUTION_MIN_HOURS = 168
+ATTRIBUTION_RIDGE = 0.0
 STORAGE_TOP_HOURS = 4             # top-4 minus bottom-4 hour spread
 BASIS_PERCENTILES = (0.05, 0.95)  # P5 / P95
 

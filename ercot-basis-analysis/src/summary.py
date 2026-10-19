@@ -117,6 +117,26 @@ def main() -> int:
          ["constraint", "total_cost", "intervals_bound", "mean_shadow_price",
           "max_shadow_price"], 15)
 
+    section("5b. WHICH CONSTRAINT DRIVES EACH NODE (DAM basis ~ DAM shadow prices)")
+    attr = _load("attribution_by_node")
+    if attr is not None and not attr.empty:
+        print(f"  nodes fitted: {len(attr):,} on "
+              f"{int(attr['n_constraints'].iloc[0])} constraints")
+        print(f"  R²: median {attr['r2'].median():.2f}, "
+              f"{int((attr['r2'] >= 0.5).sum()):,} nodes >= 0.5, "
+              f"{int((attr['r2'] < 0).sum()):,} nodes < 0 (constraints outside "
+              f"the top set, or none)")
+        print("\n  worst nodes and the constraint behind them:")
+        show(attr, "attribution_by_node",
+             ["Location", "mean_basis", "explained_mean", "residual_mean", "r2",
+              "dominant_constraint", "dominant_contribution", "dominant_share"], 15)
+        print("\n  constraints by how many nodes they dominate:")
+        show(_load("attribution_by_constraint"), "attribution_by_constraint",
+             ["constraint", "nodes_dominated", "nodes_affected",
+              "total_abs_contribution", "mean_shadow_price", "hours_bound"], 12)
+    else:
+        print("  (attribution_by_node is empty or absent)")
+
     section("6. DA-RT SPREAD -- PERSISTENT BIAS")
     da_rt = _load("da_rt_by_node")
     if da_rt is not None and not da_rt.empty:

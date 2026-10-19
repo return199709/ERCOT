@@ -263,3 +263,42 @@ attributable to the node's own basis. The hub benchmark is the mean across
 the four trading hubs, not each node's assigned hub, so the split measures
 "volatile market" against "well-placed site" rather than re-importing the hub
 assignment assumption from section 1.
+
+## 17. Congestion attribution: structure, not correlation
+
+In the day-ahead market a bus price is the energy price plus, for each
+binding constraint, the bus's shift factor times the constraint's shadow
+price. A hub is a weighted average of bus prices. So a node's basis is
+
+    basis(t) = sum over constraints k of [SF_hub,k - SF_node,k] x mu_k(t)
+
+with no intercept: no binding constraint, no basis. ERCOT publishes mu (the
+shadow prices) but not the shift factors.
+
+**Assumption:** the bracketed shift-factor differences are estimated per node
+by no-intercept least squares of hourly DAM basis on the hourly DAM shadow
+prices of the top `ATTRIBUTION_TOP_K` constraints by congestion cost (those
+that bound for at least `ATTRIBUTION_MIN_BOUND_HOURS` hours). A constraint's
+contribution to a node's mean basis is coefficient x mean shadow price; the
+largest contribution names the dominant constraint. The residual mean is what
+the included constraints leave unexplained.
+
+What this is not:
+
+- **Not exact.** Shift factors move with topology and outages within the
+  period, hub weights are not in the feeds, and only the top constraints are
+  included. R² is reported per node, computed about the mean as usual, so it
+  can be negative when the included constraints explain a node worse than its
+  own mean would. That is the signal that the driver is outside the set.
+- **Not a correlation study.** The linear form is how the market clears, so
+  the coefficients have a physical reading ($/MWh of basis per $/MWh of shadow
+  price). But constraints that always bind together are collinear and split
+  their joint effect unstably; read their contributions as a group. An
+  optional ridge penalty (`ATTRIBUTION_RIDGE`, default 0) stabilises them at
+  the cost of bias and must be disclosed if used.
+- **Day-ahead only.** DAM basis on DAM shadow prices, from the same clearing.
+  A real-time counterpart needs a real-time basis table, which does not
+  exist yet; SCED shadow prices are therefore not used here.
+- **Same-hour only.** Shadow prices and basis are matched hour for hour.
+  Several rows for one constraint in one hour (different contingencies) are
+  summed, matching how `constraints.py` keys on constraint name.

@@ -120,6 +120,29 @@ with tabs[2]:
                    "weighted comparably.")
         st.dataframe(constraints, width="stretch")
 
+        attr_nodes = load("attribution_by_node")
+        attr_constraints = load("attribution_by_constraint")
+        if attr_constraints is not None and not attr_constraints.empty:
+            st.subheader("Which constraints drive node basis")
+            st.caption(
+                "Each node's hourly day-ahead basis is regressed on the hourly "
+                "shadow prices of the top constraints (no intercept, as nodal "
+                "pricing implies). A constraint 'dominates' a node when it is "
+                "the largest contributor to that node's mean basis. R² says "
+                "how much of the node's basis the included constraints explain."
+            )
+            st.bar_chart(attr_constraints.set_index("constraint")["nodes_dominated"]
+                         .head(15), height=320, color="#b2182b")
+            st.dataframe(attr_constraints, width="stretch")
+        if attr_nodes is not None and not attr_nodes.empty:
+            st.write("**Worst nodes and the constraint behind each**")
+            st.dataframe(
+                attr_nodes[["Location", "mean_basis", "dominant_constraint",
+                            "dominant_contribution", "dominant_share", "r2",
+                            "residual_mean"]].head(25),
+                width="stretch",
+            )
+
         seasonal = load("constraint_seasonality")
         if seasonal is not None and not seasonal.empty:
             st.subheader("Seasonality")
@@ -159,6 +182,23 @@ with tabs[3]:
         rows = rows.sort_values("interval_start_utc")
         st.line_chart(rows.set_index("interval_start_utc")["basis"], height=320)
         st.caption(f"Basis over time for {node} ($/MWh).")
+
+        contrib = load("attribution_contributions")
+        attr_nodes = load("attribution_by_node")
+        if contrib is not None and attr_nodes is not None:
+            fit = attr_nodes[attr_nodes["Location"] == node]
+            top = contrib[contrib["Location"] == node]
+            if not fit.empty and not top.empty:
+                f = fit.iloc[0]
+                st.write("**What drives this node's basis**")
+                st.caption(f"R² {f['r2']:.2f}; constraints explain "
+                           f"${f['explained_mean']:,.2f} of the ${f['mean_basis']:,.2f} "
+                           f"mean basis, leaving ${f['residual_mean']:,.2f} to "
+                           f"constraints outside the fitted set.")
+                top = top.reindex(top["contribution"].abs()
+                                  .sort_values(ascending=False).index).head(8)
+                st.dataframe(top[["constraint", "coefficient", "mean_shadow_price",
+                                  "contribution", "abs_share"]], width="stretch")
 
 # --- 5. DA vs RT ----------------------------------------------------------
 with tabs[4]:
