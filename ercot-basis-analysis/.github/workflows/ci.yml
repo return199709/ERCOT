@@ -1,0 +1,46 @@
+# CI for the standalone repository, where this folder is the repo root.
+#
+# Inside the ERCOT monorepo GitHub ignores this file (workflows must live at
+# the repo root; the monorepo's copy is ../../.github/workflows/ci.yml). It
+# exists so that `git subtree split --prefix=ercot-basis-analysis` produces a
+# repository that already has CI, without a path filter or working-directory
+# that would point at a folder which no longer exists.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --frozen
+      - run: uv run ruff check src app tests
+      - run: uv run pytest -q
+        env:
+          # The suite runs on labelled synthetic fixtures only. No ERCOT
+          # credentials or network access are needed or provided.
+          ERCOT_API_USERNAME: ""
+          ERCOT_API_PASSWORD: ""
+          ERCOT_PUBLIC_API_SUBSCRIPTION_KEY: ""
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
