@@ -82,8 +82,12 @@ def _normalise(df: pd.DataFrame, market: str) -> pd.DataFrame:
     out = pd.DataFrame({"constraint": df[name_col].astype(str).str.strip()})
     for key, candidates in ATTRIBUTES.items():
         col = next((c for c in candidates if c in df.columns), None)
-        out[key] = (df[col].values if col
-                    else pd.Series([pd.NA] * len(out), dtype="object"))
+        # Everything is carried as object so the DAM and SCED parts always
+        # share dtypes: pandas warns when it concatenates an all-NA object
+        # column against a numeric one, and a feed revision may lack any of
+        # these attributes. Numeric use happens downstream via to_numeric.
+        values = df[col].to_numpy(dtype=object) if col else [pd.NA] * len(out)
+        out[key] = pd.Series(values, index=out.index, dtype="object")
     out["market"] = market.upper()
     return out
 

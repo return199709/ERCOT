@@ -16,7 +16,7 @@ def _frame(series: dict[str, list[float]]) -> pd.DataFrame:
             rows.append({
                 "Location": location,
                 "interval_start_utc": pd.Timestamp("2025-06-01", tz="UTC")
-                    + pd.Timedelta(hours=hour),
+                    + pd.Timedelta(hour, unit="h"),
                 "SPP": value,
             })
     return pd.DataFrame(rows)

@@ -148,13 +148,13 @@ class TestSeriesAndAggregation:
         rows = []
         for location in locations:
             for day in range(days):
-                date = pd.Timestamp("2025-06-01").date() + pd.Timedelta(days=day)
+                date = pd.Timestamp("2025-06-01").date() + pd.Timedelta(day, unit="D")
                 for hour, price in enumerate(two_price_day(10.0, 100.0)):
                     rows.append({
                         "Location": location,
                         "local_date": date,
                         "interval_start_utc": pd.Timestamp("2025-06-01", tz="UTC")
-                            + pd.Timedelta(days=day, hours=hour),
+                            + pd.Timedelta(day * 24 + hour, unit="h"),
                         "SPP": price,
                     })
         return pd.DataFrame(rows)
