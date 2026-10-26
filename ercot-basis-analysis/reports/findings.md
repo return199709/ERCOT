@@ -3,7 +3,8 @@
 **Status: first results, from one month.** The pipeline was run end to end on
 June 2025 (2025-06-01 to 2025-06-30): ingest on 2026-10-07 and 2026-10-08,
 and `make analyze` plus `make summary` re-run on 2026-10-26 with the corrected
-peak window, zone inheritance and congestion attribution. Every number below is
+peak window, zone inheritance, congestion attribution and the constraint
+dictionary. Every number below is
 copied from that run's digest. Nothing here comes from synthetic fixtures or
 from memory of how ERCOT behaves.
 
@@ -19,9 +20,11 @@ cut, not conclusions.
 | Period | 2025-06-01 to 2025-06-30 |
 | DAM settlement points | 1,012 |
 | Nodes with a resolvable hub | 978 |
-| Node-hours of basis | 717,144 |
+| Node-hours of basis | 714,264 |
 | Zone recovered through an identical price series | 59 settlement points, 0 zone conflicts |
-| Excluded | 19: four DC ties (`DC_E`, `DC_L`, `DC_N`, `DC_R`), which sit in no zone by design, and 15 unit-level names with no listed twin (`BYU_CC1`, `CHE_CC1`, `FORMOSA_CC1`, ...) |
+| Outside the analysis by class | four DC ties (`DC_E`, `DC_L`, `DC_N`, `DC_R`): no zone, no hub |
+| Unmapped, excluded | 15 unit-level names with no listed twin (`BYU_CC1`, `CHE_CC1`, `FORMOSA_CC1`, ...) |
+| Constraint names resolved to stations | 436 of 450 |
 | RTM rows | 2,946,821 (15-minute) |
 | Data quality | 0 duplicate keys, 0 null prices, 0 wholly absent location-days; 7 locations with partial coverage; 7 partial RTM days |
 | Shared price series | 180 groups covering 550 DAM locations settle at identical prices (same electrical bus) |
@@ -125,22 +128,26 @@ spend a fifth of June below zero.
 
 ## 5. Constraints by congestion cost
 
-Ranked by shadow price × interval hours across DAM and SCED combined:
+Ranked by shadow price × interval hours across DAM and SCED combined. The
+element column comes from the feeds' own station and facility fields
+(`ASSUMPTIONS.md` §18).
 
-| constraint | total $-hours | intervals bound | mean shadow | max shadow |
-| --- | --- | --- | --- | --- |
-| 6437__F | 137,239 | 3,850 | 240.59 | 2,160.00 |
-| POT_PEAR_1 | 130,504 | 1,658 | 521.81 | 2,585.54 |
-| HARGRO_TWINBU1_1 | 93,822 | 1,248 | 583.09 | 3,500.00 |
-| HAINE__LA_PAL1_1 | 81,900 | 2,556 | 221.60 | 1,681.31 |
-| ABNTHW_SERDEV1_1 | 72,438 | 708 | 519.29 | 3,500.00 |
-| LARDVN_LASCRU1_1 | 61,963 | 2,433 | 162.70 | 1,261.94 |
-| 1710__C | 58,178 | 1,015 | 320.11 | 3,500.00 |
-| TREADW_YELWJC1_1 | 44,598 | 2,542 | 155.86 | 3,163.88 |
+| constraint | element | total $-hours | intervals bound | mean shadow | max shadow |
+| --- | --- | --- | --- | --- | --- |
+| 6437__F | SCRCV 138 kV to KNAPP 138 kV | 137,239 | 3,850 | 240.59 | 2,160.00 |
+| POT_PEAR_1 | PEARSALL 69 kV to POTEETS 69 kV | 130,504 | 1,658 | 521.81 | 2,585.54 |
+| HARGRO_TWINBU1_1 | TWINBU 138 kV to HARGROVE 138 kV | 93,822 | 1,248 | 583.09 | 3,500.00 |
+| HAINE__LA_PAL1_1 | LA_PALMA 138 kV to HAINE_DR 138 kV | 81,900 | 2,556 | 221.60 | 1,681.31 |
+| ABNTHW_SERDEV1_1 | ABNTHWST 138 kV (transformer, same station both ends) | 72,438 | 708 | 519.29 | 3,500.00 |
+| LARDVN_LASCRU1_1 | LARDVNTH 138 kV to LASCRUCE 138 kV | 61,963 | 2,433 | 162.70 | 1,261.94 |
+| 1710__C | BELCNTY 138 kV to SALSW 138 kV | 58,178 | 1,015 | 320.11 | 3,500.00 |
+| TREADW_YELWJC1_1 | TREADWEL 138 kV to YELWJCKT 138 kV | 44,598 | 2,542 | 155.86 | 3,163.88 |
 
 Six constraints reached the $3,500 to $4,500/MWh shadow price caps at least
-once. Several names (`6437__F`, `1710__C`) are opaque identifiers that need
-ERCOT's constraint lookup to be meaningful in a write-up.
+once. Thirteen of the top fifteen are 138 kV or 69 kV elements; the only
+345 kV entry, STP to WAP, carries the single highest shadow price ($4,500)
+but a modest total. June's congestion cost was mostly in the sub-transmission
+network, not the backbone.
 
 ## 5b. Which constraint drives each node
 
@@ -160,44 +167,63 @@ it.
 The fit is close to exact: for the worst nodes the residual mean is within a
 few cents of zero. Forty constraints account for June's day-ahead basis.
 
-**Worst nodes and the constraint behind each:**
+**Worst nodes and the element behind each:**
 
-| Location | mean basis | dominant constraint | contribution | share of basis | R² |
+| Location | mean basis | dominant element | contribution | share of basis | R² |
 | --- | --- | --- | --- | --- | --- |
-| ENDPARK_ESS1 / FLUVANNA_1_2 | −15.20 | 6437__F | −14.60 | 96% | 0.99 |
-| ELSAUZ_ALL / BBREEZE_1_2 | −14.81 | HAINE__LA_PAL1_1 | −4.76 | 32% | 0.98 |
-| LAUR_BESS_RN | −14.44 | HAINE__LA_PAL1_1 | −6.06 | 42% | 0.99 |
-| TORR_ALL / CORAZON_RN | −13.74 | LARDVN_LASCRU1_1 | −8.41 | 61% | 0.97 |
-| RN_SR_WIND1 | −13.72 | HAINE__LA_PAL1_1 | −5.31 | 39% | 0.99 |
-| L_FRE_ESR_RN | −13.64 | HAINE__LA_PAL1_1 | −5.29 | 39% | 0.99 |
-| LARDVFTN_G4 / G5 | −13.49 | LARDVN_LASCRU1_1 | −11.37 | 84% | 0.99 |
-| OUTP_SLR_RN | −13.49 | LARDVN_LASCRU1_1 | −8.11 | 60% | 0.97 |
-| CHALUP_ALL | −13.31 | HAINE__LA_PAL1_1 | −5.16 | 39% | 0.99 |
-| BORDAS_345 | −13.17 | LARDVN_LASCRU1_1 | −7.72 | 59% | 0.97 |
+| ENDPARK_ESS1 / FLUVANNA_1_2 | −15.20 | SCRCV 138 kV to KNAPP 138 kV (`6437__F`) | −14.60 | 96% | 0.99 |
+| ELSAUZ_ALL / BBREEZE_1_2 | −14.81 | LA_PALMA 138 kV to HAINE_DR 138 kV | −4.76 | 32% | 0.98 |
+| LAUR_BESS_RN | −14.44 | LA_PALMA 138 kV to HAINE_DR 138 kV | −6.06 | 42% | 0.99 |
+| TORR_ALL / CORAZON_RN | −13.74 | LARDVNTH 138 kV to LASCRUCE 138 kV | −8.41 | 61% | 0.97 |
+| RN_SR_WIND1 | −13.72 | LA_PALMA 138 kV to HAINE_DR 138 kV | −5.31 | 39% | 0.99 |
+| L_FRE_ESR_RN | −13.64 | LA_PALMA 138 kV to HAINE_DR 138 kV | −5.29 | 39% | 0.99 |
+| LARDVFTN_G4 / G5 | −13.49 | LARDVNTH 138 kV to LASCRUCE 138 kV | −11.37 | 84% | 0.99 |
+| OUTP_SLR_RN | −13.49 | LARDVNTH 138 kV to LASCRUCE 138 kV | −8.11 | 60% | 0.97 |
+| CHALUP_ALL | −13.31 | LA_PALMA 138 kV to HAINE_DR 138 kV | −5.16 | 39% | 0.99 |
+| BORDAS_345 | −13.17 | LARDVNTH 138 kV to LASCRUCE 138 kV | −7.72 | 59% | 0.97 |
 
-Three stories, not twenty-five:
+Three stories, not twenty-five, and each is one 138 kV line:
 
-- **West Texas** (ENDPARK, FLUVANNA): one constraint, `6437__F`, is 96% of
-  the basis. Whatever element that identifier names is the whole story at
-  those nodes.
+- **West Texas** (ENDPARK, FLUVANNA): the Scurry County to Knapp 138 kV
+  line, `6437__F`, is 96% of the basis. One line is the whole story at
+  those nodes, and it is also the costliest constraint in ERCOT for the
+  month.
 - **Rio Grande Valley** (BBREEZE, ELSAUZ, LAUR_BESS, RN_SR_WIND1, L_FRE_ESR,
-  CHALUP): `HAINE__LA_PAL1_1` (Haine Drive to La Palma, Brownsville area) is
-  the largest single driver at 32 to 42%, with the rest spread across several
-  Valley export constraints. The discount here is a portfolio of
-  constraints, which is why it is deeper on-peak when all of them bind.
-- **Laredo** (TORR, CORAZON, LARDVFTN, OUTP_SLR, BORDAS, RELOJ):
-  `LARDVN_LASCRU1_1` (Laredo VFT to Las Cruces) carries 58 to 84%.
+  CHALUP): the La Palma to Haine Drive 138 kV line is the largest single
+  driver at 32 to 42%, with the rest spread across several other Valley
+  export constraints. The discount here is a portfolio, which is why it is
+  deeper on-peak when all of them bind.
+- **Laredo** (TORR, CORAZON, LARDVFTN, OUTP_SLR, BORDAS, RELOJ): the Laredo
+  VFT North to Las Cruces 138 kV line carries 58 to 84%.
 
-`POT_PEAR_1`, second in the cost ranking, dominates none of the discount
-nodes: it is the import constraint behind the POTEETS / PEARSALL premium.
+Pearsall to Poteets 69 kV (`POT_PEAR_1`), second in the cost ranking,
+dominates none of the discount nodes: it is the import constraint behind
+the POTEETS and PEARSALL premium.
 
-Counting which constraints dominate the most nodes needs a materiality floor,
-because least squares gives every node some coefficient on every constraint.
-Before the floor was added, `MAGRUD_VICTOR2_1` "dominated" 244 nodes at a
-mean shadow price of $5: those were nodes with a few cents of basis whose
-largest term happened to be that one. The per-constraint tallies now count
-only nodes with at least $1/MWh of mean basis and contributions of at least
-$1/MWh; the regenerated table is pending the next run.
+**Which elements move the most nodes**, counting only nodes with at least
+$1/MWh of mean basis and contributions of at least $1/MWh:
+
+| element | constraint | nodes dominated | nodes affected | mean shadow (all hours) | hours bound |
+| --- | --- | --- | --- | --- | --- |
+| VICTORIA 138 kV to MAGRUDER 138 kV | MAGRUD_VICTOR2_1 | 163 | 364 | 5.47 | 608 |
+| MDO 345 kV to PHR 345 kV | MDOPHR99_A | 151 | 148 | 12.53 | 324 |
+| LNGSW 345 kV to CONSW 345 kV | 6056__Z | 119 | 162 | 17.79 | 356 |
+| SCRCV 138 kV to KNAPP 138 kV | 6437__F | 87 | 195 | 90.98 | 555 |
+| LA_PALMA 138 kV to HAINE_DR 138 kV | HAINE__LA_PAL1_1 | 50 | 91 | 52.58 | 417 |
+| LARDVNTH 138 kV to LASCRUCE 138 kV | LARDVN_LASCRU1_1 | 48 | 147 | 43.90 | 488 |
+| (unresolved) | E_PASP | 42 | 185 | 13.38 | 258 |
+
+Two kinds of constraint show up here. The three at the top have low shadow
+prices but bind for hundreds of hours and reach hundreds of nodes with small
+contributions each: broad, shallow congestion across a region, the
+Victoria-area line in particular touching 364 nodes. The three below them
+are the deep, local ones from the worst-node table: high shadow prices,
+fewer nodes, large contributions each. A site screen should treat these
+differently; the first kind shifts a whole zone's basis by a dollar or two,
+the second decides whether a specific site is viable.
+
+`E_PASP` is one of 14 names (of 450) the feeds carry without station
+fields; it is reported by name.
 
 ## 6. Day-ahead versus real-time
 
@@ -268,25 +294,25 @@ day-ahead-bidding operator would capture there more than it does elsewhere.
   near-zero residuals, which is what nodal pricing theory predicts if the
   shadow prices in the set are the ones that matter. It names
   geographically coherent constraints for each cluster of discount nodes.
+- The constraint dictionary resolved 436 of 450 names from the feeds' own
+  station fields, so the attribution reads in terms of named 138 kV lines
+  rather than identifiers.
 
 ## What it did not validate
 
 - Anything about trend or seasonality (one month).
 - Whether the NOIE zone-to-hub choices (`ASSUMPTIONS.md` §1) matter; re-cut
   against the `basis_vs_HB_*` columns before quoting a NOIE node.
-- The constraint identifiers themselves. `6437__F` is 96% of a node's basis
-  and this run's tables could not say which line or transformer it is. The
-  constraint dictionary (analysis 5c) now reads that from the feeds' own
-  station and facility columns; the labelled tables are pending the next run.
+- Fourteen constraint names (3%) the feeds carry without station fields,
+  `E_PASP` among them. They are reported by name.
 
 ## Next
 
-1. Re-run `make analyze` to regenerate the per-constraint tally with the
-   materiality floors, and refresh the table in section 5b.
-2. Re-run so the constraint dictionary labels `6437__F`, `1710__C` and
-   `MDOPHR99_A` with their stations and limiting facilities, then rewrite
-   section 5b in terms of named elements.
-3. Backfill 12 to 24 months, stopping at or treating explicitly the
-   2025-12-05 RTC+B go-live, and fill in trend and seasonality.
-4. One chart per section above, then a one-page write-up on the template in
+1. Backfill 12 to 24 months, stopping at or treating explicitly the
+   2025-12-05 RTC+B go-live, and fill in trend and seasonality. Attribution
+   over a longer window will also show whether the three lines above are
+   June phenomena or structural.
+2. One chart per section above, then a one-page write-up on the template in
    `docs/portfolio/CONVENTIONS.md`.
+3. A demo-data path so the dashboard can be hosted without ERCOT
+   credentials.
