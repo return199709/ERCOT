@@ -1,0 +1,26 @@
+[project]
+name = "grid-emissions-lakehouse"
+version = "0.1.0"
+description = "Governed Spark medallion pipeline over EPA CAMPD hourly emissions on GCP"
+readme = "README.md"
+requires-python = ">=3.11"
+# Starting point only: not yet resolved or locked.
+dependencies = [
+    "pyspark",
+    "pyyaml",
+    "pandas",
+    "pyarrow",
+    "httpx",
+    "google-cloud-storage",
+    "google-cloud-bigquery",
+    "python-dotenv",
+]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,28 @@
+# Secrets
+.env
+!.env.example
+
+# Data: keep the folder structure and the committed sample, never raw pulls
+data/raw/**
+!data/raw/.gitkeep
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Local artifacts
+*.duckdb
+
+# Airflow local state
+airflow/logs/
+airflow/*.db
+
+# Infra state
+infra/**/.terraform/
+infra/**/*.tfstate*
+
+# OS
+.DS_Store

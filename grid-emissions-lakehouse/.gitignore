@@ -1,0 +1,29 @@
+# Secrets
+.env
+!.env.example
+*.json.key
+service-account*.json
+
+# Data: keep the folder structure and the committed sample, never raw pulls
+data/raw/**
+!data/raw/.gitkeep
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Spark local artifacts
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Infra state
+infra/**/.terraform/
+infra/**/*.tfstate*
+infra/**/*.tfvars
+
+# OS
+.DS_Store

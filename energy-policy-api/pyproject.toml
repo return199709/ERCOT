@@ -1,0 +1,30 @@
+[project]
+name = "energy-policy-api"
+version = "0.1.0"
+description = "Databricks lakehouse of energy regulatory activity, served by REST and GraphQL"
+readme = "README.md"
+requires-python = ">=3.11"
+# Starting point only: not yet resolved or locked.
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "strawberry-graphql[fastapi]",
+    "pydantic",
+    "httpx",
+    "duckdb",
+    "pandas",
+    "pyarrow",
+    "slowapi",
+    "databricks-sdk",
+    "databricks-sql-connector",
+    "python-dotenv",
+]
+
+[dependency-groups]
+dev = ["pytest", "ruff", "schemathesis"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
