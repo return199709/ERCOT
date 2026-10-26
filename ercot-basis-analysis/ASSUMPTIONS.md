@@ -33,6 +33,12 @@ defensibly be referenced to a different hub, which would change its basis.
 `HB_BUSAVG` (`basis_vs_HB_*` columns), so any conclusion can be re-cut against
 a different reference without re-ingesting.
 
+**DC ties are outside the analysis by design.** `DC_E`, `DC_N`, `DC_L`,
+`DC_R` and `DC_S` are priced settlement points for the ties to the Eastern
+Interconnection and Mexico. They sit in no load zone and settle against no
+hub, so they carry no basis and are excluded as a class rather than listed
+as mapping failures.
+
 **Nodes whose load zone cannot be determined are never guessed.** They are
 returned in an `unmapped` list, excluded from basis, and reported. Assigning
 them a plausible-looking hub would produce confident and wrong numbers.
@@ -299,6 +305,15 @@ What this is not:
 - **Day-ahead only.** DAM basis on DAM shadow prices, from the same clearing.
   A real-time counterpart needs a real-time basis table, which does not
   exist yet; SCED shadow prices are therefore not used here.
+- **Tallies use materiality floors.** Least squares gives every node a
+  coefficient on every constraint, so without a floor every constraint
+  "affects" every node and a node with a few cents of basis has a dominant
+  constraint worth a few cents. A node counts as dominated only if its
+  |mean basis| is at least `ATTRIBUTION_MATERIAL_BASIS` ($1/MWh), and a
+  constraint counts as affecting a node only if its |contribution| is at
+  least `ATTRIBUTION_MATERIAL_CONTRIBUTION` ($1/MWh). The per-node and
+  per-contribution tables are unfiltered; only the per-constraint tallies
+  apply the floors.
 - **Same-hour only.** Shadow prices and basis are matched hour for hour.
   Several rows for one constraint in one hour (different contingencies) are
   summed, matching how `constraints.py` keys on constraint name.

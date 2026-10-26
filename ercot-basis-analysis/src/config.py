@@ -25,6 +25,10 @@ ERCOT_TZ = "US/Central"
 # hub or a load zone is treated as a resource node.
 HUB_PREFIX = "HB_"
 LOAD_ZONE_PREFIX = "LZ_"
+# DC ties to the Eastern Interconnection and Mexico (DC_E, DC_N, DC_L,
+# DC_R, DC_S). Priced settlement points, but in no load zone and with no
+# hub to settle against, so they are outside the basis analysis by design.
+DC_TIE_PREFIX = "DC_"
 
 TRADING_HUBS = ["HB_NORTH", "HB_SOUTH", "HB_WEST", "HB_HOUSTON"]
 # Bus-average hub, used as a secondary ERCOT-wide reference.
@@ -90,6 +94,15 @@ ATTRIBUTION_TOP_K = 40
 ATTRIBUTION_MIN_BOUND_HOURS = 24
 ATTRIBUTION_MIN_HOURS = 168
 ATTRIBUTION_RIDGE = 0.0
+# Materiality for the per-constraint tallies, both in $/MWh of mean basis.
+# Least squares gives every node a coefficient on every constraint, so
+# without a floor every constraint "affects" every node, and a node whose
+# basis is a few cents has a "dominant" constraint of a few cents. A node
+# counts as dominated only if |mean basis| clears the first floor; a
+# constraint counts as affecting a node only if |contribution| clears the
+# second.
+ATTRIBUTION_MATERIAL_BASIS = 1.0
+ATTRIBUTION_MATERIAL_CONTRIBUTION = 1.0
 STORAGE_TOP_HOURS = 4             # top-4 minus bottom-4 hour spread
 BASIS_PERCENTILES = (0.05, 0.95)  # P5 / P95
 

@@ -3,6 +3,7 @@
 import pandas as pd
 
 from src.transform.mapping import (
+    DC_TIE,
     HUB,
     LOAD_ZONE,
     RESOURCE_NODE,
@@ -25,6 +26,9 @@ class TestClassify:
     def test_non_string_is_a_node(self):
         assert classify_location(None) == RESOURCE_NODE
 
+    def test_dc_tie_prefix(self):
+        assert classify_location("DC_E") == DC_TIE
+
 
 class TestAssignHub:
     def test_node_takes_its_zones_hub(self, zone_map):
@@ -43,6 +47,12 @@ class TestAssignHub:
     def test_unknown_node_is_reported_not_guessed(self):
         """The critical safety property: never invent an assignment."""
         hubs, unmapped = assign_hub(pd.Series(["MYSTERY_NODE"]), {})
+        assert pd.isna(hubs.iloc[0])
+        assert unmapped == ["MYSTERY_NODE"]
+
+    def test_dc_tie_is_excluded_but_not_reported_unmapped(self):
+        """A DC tie has no zone to look up; it is not a mapping failure."""
+        hubs, unmapped = assign_hub(pd.Series(["DC_E", "MYSTERY_NODE"]), {})
         assert pd.isna(hubs.iloc[0])
         assert unmapped == ["MYSTERY_NODE"]
 

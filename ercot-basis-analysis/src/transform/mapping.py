@@ -20,6 +20,7 @@ from __future__ import annotations
 import pandas as pd
 
 from src.config import (
+    DC_TIE_PREFIX,
     HUB_PREFIX,
     LOAD_ZONE_PREFIX,
     REFERENCE_HUBS,
@@ -30,6 +31,7 @@ from src.config import (
 HUB = "hub"
 LOAD_ZONE = "load_zone"
 RESOURCE_NODE = "resource_node"
+DC_TIE = "dc_tie"
 
 
 def classify_location(name: str) -> str:
@@ -41,6 +43,8 @@ def classify_location(name: str) -> str:
         return HUB
     if upper.startswith(LOAD_ZONE_PREFIX):
         return LOAD_ZONE
+    if upper.startswith(DC_TIE_PREFIX):
+        return DC_TIE
     return RESOURCE_NODE
 
 
@@ -171,6 +175,9 @@ def assign_hub(
             assigned.append(ZONE_TO_HUB.get(name, pd.NA))
             if name not in ZONE_TO_HUB:
                 unmapped.append(name)
+        elif kind == DC_TIE:
+            # Outside the basis analysis by design: no zone, no hub.
+            assigned.append(pd.NA)
         else:
             zone = zone_map.get(name)
             hub = ZONE_TO_HUB.get(zone) if zone else None

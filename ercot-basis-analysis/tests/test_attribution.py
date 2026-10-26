@@ -154,9 +154,23 @@ class TestFit:
             min_hours=24,
         )
         counts = by_constraint.set_index("constraint")["nodes_dominated"]
-        assert counts["SYNTH_TIE_A"] >= 1
-        assert counts["SYNTH_TIE_B"] >= 1
-        assert counts.sum() == 3  # every fitted node has one dominant constraint
+        assert counts["SYNTH_TIE_A"] == 1   # node W
+        assert counts["SYNTH_TIE_B"] == 1   # node E
+        # The flat node's basis is noise around zero: below the materiality
+        # floor, so it dominates nothing even though it has a largest term.
+        assert counts.sum() == 2
+
+    def test_nodes_affected_ignores_immaterial_coefficients(self, world):
+        mu, basis = world
+        _, _, by_constraint = attribution.attribute(
+            _basis(basis), _shadow_prices(mu), top_k=10, min_bound_hours=1,
+            min_hours=24,
+        )
+        affected = by_constraint.set_index("constraint")["nodes_affected"]
+        # A touches W (-0.08) and E (+0.02) materially; B only E (+0.15).
+        # W's +0.01 on B and the flat node's noise are below the floor.
+        assert affected["SYNTH_TIE_A"] == 2
+        assert affected["SYNTH_TIE_B"] == 1
 
     def test_short_node_is_skipped_not_fitted(self, world):
         mu, basis = world

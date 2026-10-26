@@ -1,11 +1,11 @@
 # Findings
 
 **Status: first results, from one month.** The pipeline was run end to end on
-June 2025 (2025-06-01 to 2025-06-30) on 2026-10-07 and 2026-10-08: the
-settlement point mapping, all seven daily datasets, `make analyze` including
-the battery dispatch, and `make summary`. Every number below is copied from
-that run's digest. Nothing here comes from synthetic fixtures or from memory
-of how ERCOT behaves.
+June 2025 (2025-06-01 to 2025-06-30): ingest on 2026-10-07 and 2026-10-08,
+and `make analyze` plus `make summary` re-run on 2026-10-26 with the corrected
+peak window, zone inheritance and congestion attribution. Every number below is
+copied from that run's digest. Nothing here comes from synthetic fixtures or
+from memory of how ERCOT behaves.
 
 One month cannot support the year-over-year trend analysis or the constraint
 seasonality view, and a single June is a hot, high-solar, high-congestion
@@ -18,9 +18,10 @@ cut, not conclusions.
 | --- | --- |
 | Period | 2025-06-01 to 2025-06-30 |
 | DAM settlement points | 1,012 |
-| Nodes with a resolvable hub | 919 |
+| Nodes with a resolvable hub | 978 |
 | Node-hours of basis | 717,144 |
-| Unmapped, excluded | 78 settlement points, mostly unit-level names such as `AMOCOOIL_CC1`, `BASTEN_CC1` |
+| Zone recovered through an identical price series | 59 settlement points, 0 zone conflicts |
+| Excluded | 19: four DC ties (`DC_E`, `DC_L`, `DC_N`, `DC_R`), which sit in no zone by design, and 15 unit-level names with no listed twin (`BYU_CC1`, `CHE_CC1`, `FORMOSA_CC1`, ...) |
 | RTM rows | 2,946,821 (15-minute) |
 | Data quality | 0 duplicate keys, 0 null prices, 0 wholly absent location-days; 7 locations with partial coverage; 7 partial RTM days |
 | Shared price series | 180 groups covering 550 DAM locations settle at identical prices (same electrical bus) |
@@ -30,9 +31,10 @@ contain the same price series several times under different names. Pairs such
 as `ENDPARK_ESS1` / `FLUVANNA_1_2` and `TORR_ALL` / `CORAZON_RN` are one
 observation each.
 
-The 78 unmapped points were excluded in this run. Zone inheritance through
-identical price series (`ASSUMPTIONS.md` §1b) was added afterwards and should
-recover most of them on the next `make analyze`; the figures here predate it.
+Zone inheritance (`ASSUMPTIONS.md` §1b) recovered 59 of the 78 points the
+settlement point list alone could not place, with no group showing a zone
+conflict. The dispatch node-day count rose by exactly 59 x 30, so the
+recovered points flow through every downstream table.
 
 ## 1. Basis distribution
 
@@ -63,31 +65,28 @@ RUSSEKST_RN +$21.07, JUNORTH_RN / JUNCTION_RN about +$20, with P95 values of
 $65 to $166. These sit on the import side of constraints and are the storage
 sites of section 7.
 
-495 of 919 nodes (53.9%) had a negative mean basis.
+525 of 978 nodes (53.7%) had a negative mean basis.
 
 ## 2. On-peak versus off-peak
 
-> **Caveat.** This run used a peak window of 15 hours (interval starts 07:00
-> to 21:00) rather than ERCOT's 16-hour 5×16 (06:00 to 21:00). The defect is
-> fixed; the table below is from the uncorrected run and will shift slightly
-> when regenerated. The direction of the findings does not depend on the
-> 06:00 hour.
+On-peak is ERCOT 5×16 (hour-ending 07 to 22, weekdays, no NERC holidays):
+336 on-peak and 384 off-peak hours per node in June.
 
 Most of the worst nodes are more negative on-peak than off-peak, which is not
 what a pure solar-cannibalisation story predicts:
 
 | Location | off-peak mean | on-peak mean |
 | --- | --- | --- |
-| BBREEZE_1_2 / ELSAUZ_ALL | −10.05 | −20.93 |
-| LAUR_BESS_RN | −9.75 | −20.47 |
-| RN_SR_WIND1 | −9.29 | −19.42 |
-| TORR_ALL / CORAZON_RN | −11.22 | −16.98 |
-| ENDPARK_ESS1 / FLUVANNA_1_2 | −18.04 | −11.55 |
+| BBREEZE_1_2 / ELSAUZ_ALL | −10.49 | −19.74 |
+| LAUR_BESS_RN | −10.18 | −19.30 |
+| RN_SR_WIND1 | −9.70 | −18.32 |
+| TORR_ALL / CORAZON_RN | −11.63 | −16.15 |
+| ENDPARK_ESS1 / FLUVANNA_1_2 | −18.35 | −11.60 |
 
 The South Texas group (BBREEZE, LAUR_BESS, CORAZON) is roughly twice as
 discounted on-peak, consistent with export constraints binding when load is
 high. ENDPARK / FLUVANNA in the west is the reverse, consistent with overnight
-wind. Those are hypotheses to test with the constraint data, not findings yet.
+wind. Section 5b names the constraints behind each.
 
 ## 3. Basis and renewable output
 
@@ -140,12 +139,65 @@ Ranked by shadow price × interval hours across DAM and SCED combined:
 | TREADW_YELWJC1_1 | 44,598 | 2,542 | 155.86 | 3,163.88 |
 
 Six constraints reached the $3,500 to $4,500/MWh shadow price caps at least
-once. `LARDVN_LASCRU1_1` (Laredo) and `POT_PEAR_1` (Poteet to Pearsall, south
-of San Antonio) line up with the South Texas discount nodes and the POTEETS /
-PEARSALL premium nodes respectively. Linking nodes to constraints formally is
-the next modelling step; this run only ranks constraints system-wide. Several
-names (`6437__F`, `1710__C`) are opaque identifiers that need ERCOT's
-constraint lookup to be meaningful in a write-up.
+once. Several names (`6437__F`, `1710__C`) are opaque identifiers that need
+ERCOT's constraint lookup to be meaningful in a write-up.
+
+## 5b. Which constraint drives each node
+
+Each node's hourly day-ahead basis was regressed, with no intercept, on the
+hourly shadow prices of the 40 costliest constraints (`ASSUMPTIONS.md` §17).
+The form is how nodal prices are built, so a good fit is expected if the
+right constraints are in the set, and a bad one says the driver is outside
+it.
+
+| | |
+| --- | --- |
+| Nodes fitted | 978 |
+| Median R² | 0.97 |
+| Nodes with R² ≥ 0.5 | 952 |
+| Nodes with R² < 0 | 0 |
+
+The fit is close to exact: for the worst nodes the residual mean is within a
+few cents of zero. Forty constraints account for June's day-ahead basis.
+
+**Worst nodes and the constraint behind each:**
+
+| Location | mean basis | dominant constraint | contribution | share of basis | R² |
+| --- | --- | --- | --- | --- | --- |
+| ENDPARK_ESS1 / FLUVANNA_1_2 | −15.20 | 6437__F | −14.60 | 96% | 0.99 |
+| ELSAUZ_ALL / BBREEZE_1_2 | −14.81 | HAINE__LA_PAL1_1 | −4.76 | 32% | 0.98 |
+| LAUR_BESS_RN | −14.44 | HAINE__LA_PAL1_1 | −6.06 | 42% | 0.99 |
+| TORR_ALL / CORAZON_RN | −13.74 | LARDVN_LASCRU1_1 | −8.41 | 61% | 0.97 |
+| RN_SR_WIND1 | −13.72 | HAINE__LA_PAL1_1 | −5.31 | 39% | 0.99 |
+| L_FRE_ESR_RN | −13.64 | HAINE__LA_PAL1_1 | −5.29 | 39% | 0.99 |
+| LARDVFTN_G4 / G5 | −13.49 | LARDVN_LASCRU1_1 | −11.37 | 84% | 0.99 |
+| OUTP_SLR_RN | −13.49 | LARDVN_LASCRU1_1 | −8.11 | 60% | 0.97 |
+| CHALUP_ALL | −13.31 | HAINE__LA_PAL1_1 | −5.16 | 39% | 0.99 |
+| BORDAS_345 | −13.17 | LARDVN_LASCRU1_1 | −7.72 | 59% | 0.97 |
+
+Three stories, not twenty-five:
+
+- **West Texas** (ENDPARK, FLUVANNA): one constraint, `6437__F`, is 96% of
+  the basis. Whatever element that identifier names is the whole story at
+  those nodes.
+- **Rio Grande Valley** (BBREEZE, ELSAUZ, LAUR_BESS, RN_SR_WIND1, L_FRE_ESR,
+  CHALUP): `HAINE__LA_PAL1_1` (Haine Drive to La Palma, Brownsville area) is
+  the largest single driver at 32 to 42%, with the rest spread across several
+  Valley export constraints. The discount here is a portfolio of
+  constraints, which is why it is deeper on-peak when all of them bind.
+- **Laredo** (TORR, CORAZON, LARDVFTN, OUTP_SLR, BORDAS, RELOJ):
+  `LARDVN_LASCRU1_1` (Laredo VFT to Las Cruces) carries 58 to 84%.
+
+`POT_PEAR_1`, second in the cost ranking, dominates none of the discount
+nodes: it is the import constraint behind the POTEETS / PEARSALL premium.
+
+Counting which constraints dominate the most nodes needs a materiality floor,
+because least squares gives every node some coefficient on every constraint.
+Before the floor was added, `MAGRUD_VICTOR2_1` "dominated" 244 nodes at a
+mean shadow price of $5: those were nodes with a few cents of basis whose
+largest term happened to be that one. The per-constraint tallies now count
+only nodes with at least $1/MWh of mean basis and contributions of at least
+$1/MWh; the regenerated table is pending the next run.
 
 ## 6. Day-ahead versus real-time
 
@@ -210,22 +262,28 @@ day-ahead-bidding operator would capture there more than it does elsewhere.
 - The load-zone proxy for hub assignment covers 93.5% of nodes from the
   settlement point list alone.
 - The shared-series check found 180 groups; without it the worst-25 list
-  would have counted several buses twice.
+  would have counted several buses twice. The same groups recovered 59
+  unmapped points with no zone conflicts.
+- The structural attribution model fits with a median R² of 0.97 and
+  near-zero residuals, which is what nodal pricing theory predicts if the
+  shadow prices in the set are the ones that matter. It names
+  geographically coherent constraints for each cluster of discount nodes.
 
 ## What it did not validate
 
 - Anything about trend or seasonality (one month).
 - Whether the NOIE zone-to-hub choices (`ASSUMPTIONS.md` §1) matter; re-cut
   against the `basis_vs_HB_*` columns before quoting a NOIE node.
-- Which constraints drive which nodes. The ranking is system-wide.
+- The constraint identifiers themselves. `6437__F` is 96% of a node's basis
+  and the report cannot yet say which line or transformer it is.
 
 ## Next
 
-1. Re-run `make analyze` with the corrected peak window and the zone
-   inheritance, and refresh sections 1, 2 and 7.
-2. Backfill 12 to 24 months, stopping at or treating explicitly the
+1. Re-run `make analyze` to regenerate the per-constraint tally with the
+   materiality floors, and refresh the table in section 5b.
+2. Resolve constraint identifiers (`6437__F`, `1710__C`, `MDOPHR99_A`) to
+   named elements using ERCOT's constraint and contingency reports.
+3. Backfill 12 to 24 months, stopping at or treating explicitly the
    2025-12-05 RTC+B go-live, and fill in trend and seasonality.
-3. Congestion attribution: regress hourly node basis on binding-constraint
-   shadow prices to name the constraint behind each worst node.
 4. One chart per section above, then a one-page write-up on the template in
    `docs/portfolio/CONVENTIONS.md`.

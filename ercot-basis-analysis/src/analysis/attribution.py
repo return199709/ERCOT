@@ -44,6 +44,8 @@ import pandas as pd
 from src.analysis.common import require
 from src.analysis.constraints import normalise
 from src.config import (
+    ATTRIBUTION_MATERIAL_BASIS,
+    ATTRIBUTION_MATERIAL_CONTRIBUTION,
     ATTRIBUTION_MIN_BOUND_HOURS,
     ATTRIBUTION_MIN_HOURS,
     ATTRIBUTION_RIDGE,
@@ -61,7 +63,7 @@ CONTRIBUTION_COLUMNS = [
 ]
 BY_CONSTRAINT_COLUMNS = [
     "constraint", "nodes_dominated", "nodes_affected", "total_abs_contribution",
-    "mean_shadow_price", "hours_bound",
+    "mean_shadow_price_all_hours", "hours_bound",
 ]
 
 
@@ -142,12 +144,24 @@ def attribute(
     min_bound_hours: int = ATTRIBUTION_MIN_BOUND_HOURS,
     min_hours: int = ATTRIBUTION_MIN_HOURS,
     ridge: float = ATTRIBUTION_RIDGE,
+    material_basis: float = ATTRIBUTION_MATERIAL_BASIS,
+    material_contribution: float = ATTRIBUTION_MATERIAL_CONTRIBUTION,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Fit every node. Returns (by_node, contributions, by_constraint).
 
     A node is fitted on the hours where both its basis and the shadow price
     matrix exist; nodes with fewer than `min_hours` such hours are skipped
     rather than fitted on a sliver.
+
+    `by_node` and `contributions` carry every fitted coefficient. The
+    per-constraint tallies in `by_constraint` apply materiality floors:
+    `nodes_dominated` counts only nodes whose |mean basis| is at least
+    `material_basis`, and `nodes_affected` counts only nodes where the
+    constraint's |contribution| is at least `material_contribution`. Without
+    the floors every constraint touches every node and a node with a basis
+    of a few cents has a "dominant" constraint of a few cents.
+    `mean_shadow_price_all_hours` averages over every hour, zeros included,
+    so it is lower than the bound-hours mean in the constraint ranking.
     """
     require(basis_df, ["Location", "interval_start_utc", "basis"], "attribution")
     empty = (pd.DataFrame(columns=BY_NODE_COLUMNS),
@@ -223,8 +237,12 @@ def attribute(
                      .reset_index(drop=True))
 
     hours_bound = (x_all != 0).sum(axis=0)
-    dominated = by_node["dominant_constraint"].value_counts()
-    affected = contributions.groupby("constraint")["Location"].nunique()
+    material_nodes = by_node[by_node["mean_basis"].abs() >= material_basis]
+    dominated = material_nodes["dominant_constraint"].value_counts()
+    material_rows = contributions[
+        contributions["contribution"].abs() >= material_contribution
+    ]
+    affected = material_rows.groupby("constraint")["Location"].nunique()
     abs_contrib = contributions.groupby("constraint")["contribution"].apply(
         lambda s: float(s.abs().sum())
     )
@@ -233,7 +251,7 @@ def attribute(
         "nodes_dominated": [int(dominated.get(c, 0)) for c in constraints],
         "nodes_affected": [int(affected.get(c, 0)) for c in constraints],
         "total_abs_contribution": [float(abs_contrib.get(c, 0.0)) for c in constraints],
-        "mean_shadow_price": mean_shadow,
+        "mean_shadow_price_all_hours": mean_shadow,
         "hours_bound": [int(hours_bound[c]) for c in constraints],
     }, columns=BY_CONSTRAINT_COLUMNS)
     by_constraint = by_constraint.sort_values(

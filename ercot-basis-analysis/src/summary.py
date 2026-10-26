@@ -133,7 +133,10 @@ def main() -> int:
         print("\n  constraints by how many nodes they dominate:")
         show(_load("attribution_by_constraint"), "attribution_by_constraint",
              ["constraint", "nodes_dominated", "nodes_affected",
-              "total_abs_contribution", "mean_shadow_price", "hours_bound"], 12)
+              "total_abs_contribution", "mean_shadow_price_all_hours",
+              "hours_bound"], 12)
+        print("  nodes_dominated and nodes_affected apply the materiality floors "
+              "in config ($/MWh of mean basis).")
     else:
         print("  (attribution_by_node is empty or absent)")
 
