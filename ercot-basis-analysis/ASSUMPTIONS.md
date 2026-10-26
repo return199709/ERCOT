@@ -317,3 +317,19 @@ What this is not:
 - **Same-hour only.** Shadow prices and basis are matched hour for hour.
   Several rows for one constraint in one hour (different contingencies) are
   summed, matching how `constraints.py` keys on constraint name.
+
+## 18. Constraint names are resolved from the feeds, not looked up elsewhere
+
+Constraint names such as `6437__F` are identifiers. Both shadow price feeds
+carry, on every row, the from and to station, their voltage levels, the
+limiting facility and the contingency under which the constraint bound. The
+dictionary (`constraint_dictionary` table) reduces those rows to one record
+per name.
+
+**Assumption:** where a name appears with more than one value for an
+attribute, the most frequent value is the element's description, and the
+number of distinct contingencies is reported beside it. A name that has
+covered several physical situations is therefore visible as such rather than
+silently collapsed. Names absent from both feeds keep themselves as their
+label, so the `element` column is never blank. No external mapping file or
+ERCOT network model is consulted.

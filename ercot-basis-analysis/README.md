@@ -83,6 +83,7 @@ prices across all settlement points.
 | 4 | Negative price hours: count and share by node and month | `src/analysis/negative_prices.py` |
 | 5 | Constraints ranked by congestion cost; seasonality; top 15 | `src/analysis/constraints.py` |
 | 5b | Congestion attribution: per-node fit of basis on constraint shadow prices; dominant constraint per node | `src/analysis/attribution.py` |
+| 5c | Constraint dictionary: what element each constraint name is (stations, kV, limiting facility, contingency), from the feeds' own columns | `src/analysis/constraint_dictionary.py` |
 | 6 | DA–RT spread mean and volatility; persistent bias | `src/analysis/da_rt.py` |
 | 7 | Storage screen: daily top-4 minus bottom-4 hour spread | `src/analysis/storage.py` |
 

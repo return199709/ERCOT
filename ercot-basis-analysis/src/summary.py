@@ -113,9 +113,12 @@ def main() -> int:
               "min_price"], 10)
 
     section("5. TOP CONSTRAINTS BY CONGESTION COST ($-hours)")
-    show(_load("top_constraints"), "top_constraints",
-         ["constraint", "total_cost", "intervals_bound", "mean_shadow_price",
-          "max_shadow_price"], 15)
+    top = _load("top_constraints")
+    cols = ["constraint", "total_cost", "intervals_bound", "mean_shadow_price",
+            "max_shadow_price"]
+    if top is not None and "element" in top.columns:
+        cols.insert(1, "element")
+    show(top, "top_constraints", cols, 15)
 
     section("5b. WHICH CONSTRAINT DRIVES EACH NODE (DAM basis ~ DAM shadow prices)")
     attr = _load("attribution_by_node")
@@ -127,14 +130,19 @@ def main() -> int:
               f"{int((attr['r2'] < 0).sum()):,} nodes < 0 (constraints outside "
               f"the top set, or none)")
         print("\n  worst nodes and the constraint behind them:")
-        show(attr, "attribution_by_node",
-             ["Location", "mean_basis", "explained_mean", "residual_mean", "r2",
-              "dominant_constraint", "dominant_contribution", "dominant_share"], 15)
+        node_cols = ["Location", "mean_basis", "residual_mean", "r2",
+                     "dominant_constraint", "dominant_contribution", "dominant_share"]
+        if "dominant_element" in attr.columns:
+            node_cols.insert(5, "dominant_element")
+        show(attr, "attribution_by_node", node_cols, 15)
         print("\n  constraints by how many nodes they dominate:")
-        show(_load("attribution_by_constraint"), "attribution_by_constraint",
-             ["constraint", "nodes_dominated", "nodes_affected",
-              "total_abs_contribution", "mean_shadow_price_all_hours",
-              "hours_bound"], 12)
+        by_c = _load("attribution_by_constraint")
+        c_cols = ["constraint", "nodes_dominated", "nodes_affected",
+                  "total_abs_contribution", "mean_shadow_price_all_hours",
+                  "hours_bound"]
+        if by_c is not None and "element" in by_c.columns:
+            c_cols.insert(1, "element")
+        show(by_c, "attribution_by_constraint", c_cols, 12)
         print("  nodes_dominated and nodes_affected apply the materiality floors "
               "in config ($/MWh of mean basis).")
     else:

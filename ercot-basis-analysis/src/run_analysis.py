@@ -19,6 +19,7 @@ from src import db
 from src.analysis import (
     attribution,
     basis_stats,
+    constraint_dictionary,
     constraints,
     da_rt,
     dispatch,
@@ -200,11 +201,20 @@ def run(verbose: bool = False) -> int:
     # --- analysis 5 (constraints) ----------------------------------------
     dam_sp = _load("dam_shadow_prices")
     sced_sp = _load("sced_shadow_prices")
+    # What each constraint name physically is, read from the feeds' own
+    # station, voltage, facility and contingency columns. Nothing fetched.
+    dictionary = constraint_dictionary.build(dam_sp, sced_sp)
+    if not dictionary.empty:
+        written.append(str(db.write_processed(dictionary, "constraint_dictionary")))
+        named = int(dictionary["from_station"].notna().sum())
+        print(f"  constraint dictionary: {len(dictionary):,} names, "
+              f"{named:,} resolved to stations")
     if dam_sp is not None or sced_sp is not None:
         ranked, allrows = constraints.combined(
             dam_sp if dam_sp is not None else pd.DataFrame(),
             sced_sp if sced_sp is not None else pd.DataFrame(),
         )
+        ranked = constraint_dictionary.attach(ranked, dictionary)
         written.append(str(db.write_processed(ranked, "top_constraints")))
         if not allrows.empty:
             written.append(str(db.write_processed(constraints.seasonality(allrows),
@@ -223,6 +233,11 @@ def run(verbose: bool = False) -> int:
             print("  attribution: no node had enough overlapping hours with "
                   "the shadow price matrix; skipped", file=sys.stderr)
         else:
+            by_node = constraint_dictionary.attach(
+                by_node, dictionary, on="dominant_constraint", out="dominant_element"
+            )
+            contrib = constraint_dictionary.attach(contrib, dictionary)
+            by_constraint = constraint_dictionary.attach(by_constraint, dictionary)
             written.append(str(db.write_processed(by_node, "attribution_by_node")))
             written.append(str(db.write_processed(contrib, "attribution_contributions")))
             written.append(str(db.write_processed(by_constraint,

@@ -275,14 +275,17 @@ day-ahead-bidding operator would capture there more than it does elsewhere.
 - Whether the NOIE zone-to-hub choices (`ASSUMPTIONS.md` §1) matter; re-cut
   against the `basis_vs_HB_*` columns before quoting a NOIE node.
 - The constraint identifiers themselves. `6437__F` is 96% of a node's basis
-  and the report cannot yet say which line or transformer it is.
+  and this run's tables could not say which line or transformer it is. The
+  constraint dictionary (analysis 5c) now reads that from the feeds' own
+  station and facility columns; the labelled tables are pending the next run.
 
 ## Next
 
 1. Re-run `make analyze` to regenerate the per-constraint tally with the
    materiality floors, and refresh the table in section 5b.
-2. Resolve constraint identifiers (`6437__F`, `1710__C`, `MDOPHR99_A`) to
-   named elements using ERCOT's constraint and contingency reports.
+2. Re-run so the constraint dictionary labels `6437__F`, `1710__C` and
+   `MDOPHR99_A` with their stations and limiting facilities, then rewrite
+   section 5b in terms of named elements.
 3. Backfill 12 to 24 months, stopping at or treating explicitly the
    2025-12-05 RTC+B go-live, and fill in trend and seasonality.
 4. One chart per section above, then a one-page write-up on the template in

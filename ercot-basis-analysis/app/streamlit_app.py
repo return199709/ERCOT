@@ -136,12 +136,12 @@ with tabs[2]:
             st.dataframe(attr_constraints, width="stretch")
         if attr_nodes is not None and not attr_nodes.empty:
             st.write("**Worst nodes and the constraint behind each**")
-            st.dataframe(
-                attr_nodes[["Location", "mean_basis", "dominant_constraint",
-                            "dominant_contribution", "dominant_share", "r2",
-                            "residual_mean"]].head(25),
-                width="stretch",
-            )
+            node_cols = ["Location", "mean_basis", "dominant_constraint",
+                         "dominant_contribution", "dominant_share", "r2",
+                         "residual_mean"]
+            if "dominant_element" in attr_nodes.columns:
+                node_cols.insert(3, "dominant_element")
+            st.dataframe(attr_nodes[node_cols].head(25), width="stretch")
 
         seasonal = load("constraint_seasonality")
         if seasonal is not None and not seasonal.empty:
@@ -197,8 +197,11 @@ with tabs[3]:
                            f"constraints outside the fitted set.")
                 top = top.reindex(top["contribution"].abs()
                                   .sort_values(ascending=False).index).head(8)
-                st.dataframe(top[["constraint", "coefficient", "mean_shadow_price",
-                                  "contribution", "abs_share"]], width="stretch")
+                drill_cols = ["constraint", "coefficient", "mean_shadow_price",
+                              "contribution", "abs_share"]
+                if "element" in top.columns:
+                    drill_cols.insert(1, "element")
+                st.dataframe(top[drill_cols], width="stretch")
 
 # --- 5. DA vs RT ----------------------------------------------------------
 with tabs[4]:
